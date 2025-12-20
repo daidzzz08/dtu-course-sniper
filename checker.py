@@ -9,13 +9,11 @@ from email.mime.text import MIMEText
 import os
 
 # --- CONFIG ---
-# URL Database (Không đổi)
 FIREBASE_BASE_URL = "https://tool-theo-doi-slot-default-rtdb.asia-southeast1.firebasedatabase.app"
 
-# Lấy các bí mật từ GitHub Secrets
+# Lấy các bí mật từ biến môi trường
 EMAIL_USER = os.environ.get('EMAIL_USER') 
 EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD')
-# MỚI: Secret để Worker truy cập được Database khi đã khóa Rules
 FIREBASE_SECRET = os.environ.get('FIREBASE_SECRET') 
 
 HEADERS = {
@@ -28,7 +26,6 @@ def get_current_time():
     return datetime.now(tz).strftime("%H:%M %d/%m")
 
 def get_auth_param():
-    """Hàm tạo đuôi auth cho URL nếu có Secret"""
     return f"?auth={FIREBASE_SECRET}" if FIREBASE_SECRET else ""
 
 def send_email(to_email, class_name, slots, url, reg_code):
@@ -95,10 +92,15 @@ def run_worker():
     print(f"\n[{get_current_time()}] --- START SAAS WORKER (SECURE MODE) ---")
     
     auth_suffix = get_auth_param()
+    if not FIREBASE_SECRET:
+        print("⚠️ CẢNH BÁO: Không tìm thấy FIREBASE_SECRET. Worker có thể không ghi được vào DB khóa.")
 
-    # 1. Lấy danh sách Users (Dùng auth secret)
+    # 1. Lấy danh sách Users
     try:
         users_resp = requests.get(f"{FIREBASE_BASE_URL}/users.json{auth_suffix}")
+        if users_resp.status_code != 200:
+            print(f"❌ Lỗi đọc Users: {users_resp.status_code} - {users_resp.text}")
+            return
         users_data = users_resp.json()
     except Exception as e:
         print(f"❌ Connect Error: {e}")
@@ -116,13 +118,14 @@ def run_worker():
         email = user_info.get('email', 'unknown')
         expired_at = user_info.get('expired_at', 0)
         
+        # Check hạn sử dụng
         if expired_at < time.time() * 1000:
             # print(f"⛔ Skip expired: {email}")
             continue
             
         print(f"\n👤 {email}...", end="")
         
-        # 3. Lấy requests của user (Dùng auth secret)
+        # 3. Lấy requests của user
         try:
             req_resp = requests.get(f"{FIREBASE_BASE_URL}/requests/{uid}.json{auth_suffix}")
             requests_data = req_resp.json()
@@ -162,8 +165,16 @@ def run_worker():
                 "name": name, "code": code, "registration_code": reg_code, "slots": slots,
                 "notification_sent": new_notified
             }
-            requests.patch(f"{FIREBASE_BASE_URL}/requests/{uid}/{req_id}.json{auth_suffix}", json=patch_data)
-            time.sleep(0.5) # Delay nhẹ tránh DDOS trường
+            
+            try:
+                # Thêm timeout và check status code
+                patch_res = requests.patch(f"{FIREBASE_BASE_URL}/requests/{uid}/{req_id}.json{auth_suffix}", json=patch_data, timeout=10)
+                if patch_res.status_code != 200:
+                    print(f" ❌ Failed to update DB: {patch_res.status_code}", end="")
+            except Exception as e:
+                print(f" ❌ Update Error: {e}", end="")
+
+            time.sleep(0.5) 
         
         print(f" Done ({count} classes).")
 

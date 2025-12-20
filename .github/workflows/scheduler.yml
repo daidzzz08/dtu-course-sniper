@@ -2,7 +2,7 @@ name: DTU Course Sniper Worker
 
 on:
   schedule:
-    # Chạy mỗi 15 phút (Lưu ý: GitHub Actions miễn phí có thể trễ vài phút)
+    # Chạy mỗi 15 phút
     - cron: '*/15 * * * *'
   workflow_dispatch: # Cho phép bấm nút chạy thủ công để test
 
@@ -26,7 +26,9 @@ jobs:
 
     - name: Run Checker Script
       env:
-        # Map các bí mật từ GitHub Settings vào biến môi trường
+        # CÁC BIẾN MÔI TRƯỜNG QUAN TRỌNG
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        # Đã thêm dòng này để script có quyền ghi vào Database khóa
+        FIREBASE_SECRET: ${{ secrets.FIREBASE_SECRET }}
       run: python checker.py
