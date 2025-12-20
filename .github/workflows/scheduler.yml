@@ -1,15 +1,19 @@
-name: DTU Course Sniper Worker
+name: DTU Sniper Matrix Swarm
 
 on:
   schedule:
-    # Chạy mỗi 15 phút
-    - cron: '*/15 * * * *'
-  workflow_dispatch: # Cho phép bấm nút chạy thủ công để test
+    - cron: '*/5 * * * *' # Chạy mỗi 5 phút
+  workflow_dispatch:
 
 jobs:
-  check_slots:
+  check_slots_swarm:
     runs-on: ubuntu-latest
-    
+    strategy:
+      fail-fast: false # Nếu 1 worker lỗi, các worker khác vẫn chạy tiếp
+      matrix:
+        # Định nghĩa 5 worker (ID từ 0 đến 4)
+        worker_id: [0, 1, 2, 3, 4]
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
@@ -24,11 +28,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4 pytz
 
-    - name: Run Checker Script
+    - name: Run Distributed Worker
       env:
-        # CÁC BIẾN MÔI TRƯỜNG QUAN TRỌNG
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-        # Đã thêm dòng này để script có quyền ghi vào Database khóa
         FIREBASE_SECRET: ${{ secrets.FIREBASE_SECRET }}
+        # Truyền tham số Matrix vào Script
+        WORKER_ID: ${{ matrix.worker_id }}
+        TOTAL_WORKERS: 5 
       run: python checker.py

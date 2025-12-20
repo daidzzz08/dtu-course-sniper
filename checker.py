@@ -2,19 +2,29 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import time
+import random
 from datetime import datetime
 import pytz
 import smtplib
 from email.mime.text import MIMEText
 import os
+import sys
 
 # --- CONFIG ---
 FIREBASE_BASE_URL = "https://tool-theo-doi-slot-default-rtdb.asia-southeast1.firebasedatabase.app"
 
-# Lấy các bí mật từ biến môi trường
+# Lấy bí mật từ Environment
 EMAIL_USER = os.environ.get('EMAIL_USER') 
 EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD')
 FIREBASE_SECRET = os.environ.get('FIREBASE_SECRET') 
+
+# Lấy thông tin Worker từ Matrix
+try:
+    WORKER_ID = int(os.environ.get('WORKER_ID', 0))
+    TOTAL_WORKERS = int(os.environ.get('TOTAL_WORKERS', 1))
+except:
+    WORKER_ID = 0
+    TOTAL_WORKERS = 1
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
@@ -52,15 +62,15 @@ def send_email(to_email, class_name, slots, url, reg_code):
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(EMAIL_USER, EMAIL_PASSWORD)
             server.sendmail(EMAIL_USER, to_email, msg.as_string())
-        print(f"   📧 Sent mail to: {to_email}")
+        # print(f"      📧 Mail sent to {to_email}")
         return True
     except Exception as e:
-        print(f"   ❌ Mail error: {e}")
+        print(f"      ❌ Mail error: {e}")
         return False
 
 def check_one_class(url):
     try:
-        response = requests.get(url, headers=HEADERS, timeout=10)
+        response = requests.get(url, headers=HEADERS, timeout=15)
         if response.status_code != 200: return None, None, None, None
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -89,96 +99,115 @@ def check_one_class(url):
     except: return None, None, None, None
 
 def run_worker():
-    print(f"\n[{get_current_time()}] --- START SAAS WORKER (SECURE MODE) ---")
+    print(f"\n[{get_current_time()}] --- WORKER {WORKER_ID}/{TOTAL_WORKERS} STARTED ---")
     
     auth_suffix = get_auth_param()
-    if not FIREBASE_SECRET:
-        print("⚠️ CẢNH BÁO: Không tìm thấy FIREBASE_SECRET. Worker có thể không ghi được vào DB khóa.")
+    
+    # Random sleep nhẹ để tránh tất cả worker hit server cùng 1 millisecond
+    time.sleep(random.uniform(0.5, 3.0))
 
-    # 1. Lấy danh sách Users
+    # 1. Tải TOÀN BỘ dữ liệu (Users & Requests)
     try:
         users_resp = requests.get(f"{FIREBASE_BASE_URL}/users.json{auth_suffix}")
-        if users_resp.status_code != 200:
-            print(f"❌ Lỗi đọc Users: {users_resp.status_code} - {users_resp.text}")
-            return
-        users_data = users_resp.json()
+        all_requests_resp = requests.get(f"{FIREBASE_BASE_URL}/requests.json{auth_suffix}")
+        
+        users_data = users_resp.json() or {}
+        requests_data = all_requests_resp.json() or {}
     except Exception as e:
-        print(f"❌ Connect Error: {e}")
+        print(f"❌ Init Error: {e}")
         return
 
-    if not users_data:
-        print("⚠️ No users found.")
-        return
+    # 2. Gom nhóm Request (De-duplication)
+    # Map: URL -> [List of {uid, req_id, user_email, ...}]
+    unique_tasks_map = {}
 
-    print(f"👥 Users loaded: {len(users_data)}")
-
-    for uid, user_info in users_data.items():
-        if not isinstance(user_info, dict): continue
-        
-        email = user_info.get('email', 'unknown')
+    for uid, user_reqs in requests_data.items():
+        # Check User hợp lệ
+        user_info = users_data.get(uid)
+        if not user_info: continue
         expired_at = user_info.get('expired_at', 0)
-        
-        # Check hạn sử dụng
-        if expired_at < time.time() * 1000:
-            # print(f"⛔ Skip expired: {email}")
-            continue
-            
-        print(f"\n👤 {email}...", end="")
-        
-        # 3. Lấy requests của user
-        try:
-            req_resp = requests.get(f"{FIREBASE_BASE_URL}/requests/{uid}.json{auth_suffix}")
-            requests_data = req_resp.json()
-        except: continue
-        
-        if not requests_data:
-            print(" (Empty)", end="")
-            continue
-            
-        count = 0
-        for req_id, req_info in requests_data.items():
+        if expired_at < time.time() * 1000: continue # User hết hạn
+
+        if not isinstance(user_reqs, dict): continue
+
+        for req_id, req_info in user_reqs.items():
             if not isinstance(req_info, dict): continue
             url = req_info.get('url')
             if not url: continue
+
+            if url not in unique_tasks_map:
+                unique_tasks_map[url] = []
             
-            name, code, reg_code, slots = check_one_class(url)
-            count += 1
+            # Thêm người đăng ký vào nhóm URL này
+            unique_tasks_map[url].append({
+                'uid': uid,
+                'email': user_info.get('email'),
+                'req_id': req_id,
+                'info': req_info
+            })
+
+    unique_urls = list(unique_tasks_map.keys())
+    total_links = len(unique_urls)
+    
+    print(f"📊 Stats: {len(users_data)} Users | {total_links} Unique URLs")
+
+    # 3. Phân chia công việc (Sharding Logic)
+    my_tasks = []
+    for i, url in enumerate(unique_urls):
+        # Nếu số thứ tự chia lấy dư cho tổng worker == ID của worker này
+        if i % TOTAL_WORKERS == WORKER_ID:
+            my_tasks.append(url)
+
+    print(f"🐜 Worker {WORKER_ID} đảm nhận: {len(my_tasks)} links.")
+
+    # 4. Thực thi
+    for i, url in enumerate(my_tasks):
+        subscribers = unique_tasks_map[url]
+        print(f"\n[{i+1}/{len(my_tasks)}] Checking Link: ...{url[-20:]}")
+        
+        # CHỈ CHECK 1 LẦN DUY NHẤT
+        name, code, reg_code, slots = check_one_class(url)
+        
+        if not name:
+            print("   ⚠️ Failed to fetch.")
+            continue
             
-            if not name: continue
+        print(f"   ✅ Result: {code} | Slots: {slots} | Subs: {len(subscribers)}")
+
+        curr_slots = int(slots) if slots.isdigit() else 0
+
+        # CẬP NHẬT CHO TẤT CẢ USER ĐĂNG KÝ LINK NÀY
+        for sub in subscribers:
+            uid = sub['uid']
+            req_id = sub['req_id']
+            email = sub['email']
+            old_notified = sub['info'].get('notification_sent', False)
+            
+            new_notified = old_notified
 
             # Logic Mail
-            curr_slots = int(slots) if slots.isdigit() else 0
-            notified = req_info.get('notification_sent', False)
-            new_notified = notified
-            
             if curr_slots > 0:
-                print(f" [🔥 SLOT! {code}]", end="")
-                if not notified:
+                if not old_notified:
+                    print(f"      Title: Alerting {email}...")
                     if send_email(email, name, slots, url, reg_code):
                         new_notified = True
             else:
-                if notified: new_notified = False 
+                if old_notified: new_notified = False # Reset
 
-            # Update DB (Dùng auth secret)
+            # Patch DB
             patch_data = {
                 "last_check": get_current_time(),
                 "name": name, "code": code, "registration_code": reg_code, "slots": slots,
                 "notification_sent": new_notified
             }
-            
             try:
-                # Thêm timeout và check status code
-                patch_res = requests.patch(f"{FIREBASE_BASE_URL}/requests/{uid}/{req_id}.json{auth_suffix}", json=patch_data, timeout=10)
-                if patch_res.status_code != 200:
-                    print(f" ❌ Failed to update DB: {patch_res.status_code}", end="")
-            except Exception as e:
-                print(f" ❌ Update Error: {e}", end="")
-
-            time.sleep(0.5) 
+                requests.patch(f"{FIREBASE_BASE_URL}/requests/{uid}/{req_id}.json{auth_suffix}", json=patch_data, timeout=5)
+            except:
+                pass # Bỏ qua lỗi nhỏ để chạy tiếp
         
-        print(f" Done ({count} classes).")
+        time.sleep(1) # Nghỉ nhẹ giữa các link
 
-    print("\n--- FINISH ---")
+    print(f"\n--- WORKER {WORKER_ID} FINISHED ---")
 
 if __name__ == "__main__":
     run_worker()
