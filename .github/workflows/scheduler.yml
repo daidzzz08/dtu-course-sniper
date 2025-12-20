@@ -2,8 +2,8 @@ name: DTU Course Sniper Worker
 
 on:
   schedule:
-    # Chạy mỗi 15 phút
-    - cron: '*/15 * * * *'
+    # Chạy mỗi 5 phút (Bạn có thể sửa số 5 thành 10, 15, 30...)
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Cho phép bấm nút chạy thủ công để test
 
 jobs:
