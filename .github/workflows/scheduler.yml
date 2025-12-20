@@ -1,0 +1,32 @@
+name: DTU Course Sniper Worker
+
+on:
+  schedule:
+    # Chạy mỗi 15 phút (Lưu ý: GitHub Actions miễn phí có thể trễ vài phút)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Cho phép bấm nút chạy thủ công để test
+
+jobs:
+  check_slots:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4 pytz
+
+    - name: Run Checker Script
+      env:
+        # Map các bí mật từ GitHub Settings vào biến môi trường
+        EMAIL_USER: ${{ secrets.EMAIL_USER }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      run: python checker.py
