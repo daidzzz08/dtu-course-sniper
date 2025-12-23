@@ -29,7 +29,7 @@
         const db = getDatabase(app);
         
         let currentUser = null;
-        let isExpired = false;
+        let isExpired = true; // Mặc định là hết hạn
         let isAdmin = false;
 
         // --- AUTH ---
@@ -37,6 +37,8 @@
             if (user) {
                 currentUser = user;
                 checkUserStatus(user.uid);
+                // Load thông báo hệ thống mỗi khi đăng nhập/reload
+                loadSystemAnnouncement();
             } else {
                 currentUser = null;
                 showLoginScreen();
@@ -48,9 +50,7 @@
             onValue(userRef, (snapshot) => {
                 const userData = snapshot.val();
                 
-                // Trường hợp user mới đăng ký chưa có profile trong DB
                 if (!userData) {
-                    console.log("Creating new profile for:", uid);
                     createNewUserProfile(uid, currentUser.email);
                     return;
                 }
@@ -59,32 +59,34 @@
                 const now = Date.now();
                 isExpired = userData.expired_at < now;
                 
-                // Cập nhật Header
+                // Cập nhật Header UI
                 const emailDisplay = document.getElementById('user-email-display');
                 const expiryBadge = document.getElementById('expiry-badge');
                 
                 emailDisplay.innerHTML = `
                     <div class="flex flex-col items-end">
-                        <span class="font-bold text-slate-700">${userData.email}</span>
-                        <span class="text-xs text-slate-400">${isAdmin ? 'Administrator' : 'Customer'}</span>
+                        <span class="font-bold text-slate-700 text-sm">${userData.email}</span>
+                        <span class="text-[10px] text-slate-400 uppercase tracking-wide">${isAdmin ? 'Administrator' : 'Khách hàng'}</span>
                     </div>
                 `;
 
                 if (isAdmin) {
                     expiryBadge.className = "px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold border border-purple-200 shadow-sm";
-                    expiryBadge.innerHTML = `<i class="fa-solid fa-crown mr-1"></i> ADMIN PANEL`;
+                    expiryBadge.innerHTML = `<i class="fa-solid fa-crown mr-1"></i> ADMIN`;
                     document.getElementById('add-class-btn').disabled = false;
                     document.getElementById('admin-section').classList.remove('hidden');
+                    document.getElementById('contact-banner').classList.add('hidden'); // Admin không cần xem liên hệ
                     
-                    // GỌI HÀM RENDER ADMIN
                     renderAdminPanel();
+                    loadAdminAnnouncementSettings(); // Load setting thông báo cho Admin sửa
 
                 } else if (isExpired) {
                     expiryBadge.className = "px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold border border-red-200";
-                    expiryBadge.innerHTML = `<i class="fa-solid fa-lock mr-1"></i> Hết hạn`;
+                    expiryBadge.innerHTML = `<i class="fa-solid fa-lock mr-1"></i> Chưa kích hoạt`;
                     document.getElementById('add-class-btn').disabled = true;
                     document.getElementById('add-class-btn').classList.add('opacity-50', 'cursor-not-allowed');
                     document.getElementById('admin-section').classList.add('hidden');
+                    document.getElementById('contact-banner').classList.remove('hidden'); // Hiện thông tin liên hệ
                 } else {
                     const daysLeft = Math.ceil((userData.expired_at - now) / (1000 * 60 * 60 * 24));
                     expiryBadge.className = "px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold border border-green-200";
@@ -92,17 +94,19 @@
                     document.getElementById('add-class-btn').disabled = false;
                     document.getElementById('add-class-btn').classList.remove('opacity-50', 'cursor-not-allowed');
                     document.getElementById('admin-section').classList.add('hidden');
+                    document.getElementById('contact-banner').classList.add('hidden');
                 }
 
                 showAppScreen();
-                // Luôn load danh sách lớp của user đó
                 listenToClasses(uid);
             });
         }
 
+        // --- BỎ DÙNG THỬ: User mới tạo sẽ hết hạn ngay lập tức ---
         function createNewUserProfile(uid, email) {
-            const trialDays = 3;
-            const expiredAt = Date.now() + (trialDays * 24 * 60 * 60 * 1000);
+            // ExpiredAt = Thời điểm hiện tại - 1 giây (Hết hạn ngay)
+            const expiredAt = Date.now() - 1000;
+            
             set(ref(db, 'users/' + uid), {
                 email: email,
                 role: 'user',
@@ -111,32 +115,74 @@
             });
         }
 
-        // --- ADMIN PANEL LOGIC (FIXED) ---
+        // --- SYSTEM ANNOUNCEMENT (POPUP) ---
+        function loadSystemAnnouncement() {
+            const annRef = ref(db, 'system_settings/announcement');
+            get(annRef).then((snapshot) => {
+                const data = snapshot.val();
+                if (data && data.is_active) {
+                    document.getElementById('popup-title').innerText = data.title || "Thông báo hệ thống";
+                    document.getElementById('popup-content').innerText = data.content || "";
+                    // Hiện Modal
+                    document.getElementById('global-modal').classList.remove('hidden');
+                }
+            });
+        }
+
+        window.closeModal = () => {
+            document.getElementById('global-modal').classList.add('hidden');
+        }
+
+        // --- ADMIN PANEL: ANNOUNCEMENT SETTINGS ---
+        function loadAdminAnnouncementSettings() {
+            if (!isAdmin) return;
+            const annRef = ref(db, 'system_settings/announcement');
+            onValue(annRef, (snapshot) => {
+                const data = snapshot.val() || { is_active: false, title: "", content: "" };
+                document.getElementById('admin-ann-toggle').checked = data.is_active;
+                document.getElementById('admin-ann-title').value = data.title;
+                document.getElementById('admin-ann-content').value = data.content;
+            });
+        }
+
+        window.saveAnnouncement = () => {
+            if (!isAdmin) return;
+            const isActive = document.getElementById('admin-ann-toggle').checked;
+            const title = document.getElementById('admin-ann-title').value;
+            const content = document.getElementById('admin-ann-content').value;
+
+            set(ref(db, 'system_settings/announcement'), {
+                is_active: isActive,
+                title: title,
+                content: content,
+                updated_at: Date.now()
+            }).then(() => alert("Đã lưu cấu hình thông báo!"));
+        }
+
+        // --- ADMIN PANEL: USER MANAGEMENT ---
         function renderAdminPanel() {
             if (!isAdmin) return;
 
             const usersRef = ref(db, 'users');
             const listContainer = document.getElementById('user-list');
 
-            // Hiển thị trạng thái loading
             listContainer.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-slate-500"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang tải danh sách...</td></tr>';
 
             onValue(usersRef, (snapshot) => {
                 const users = snapshot.val();
-                listContainer.innerHTML = ''; // Xóa loading
+                listContainer.innerHTML = ''; 
 
                 if (!users) {
                     listContainer.innerHTML = '<tr><td colspan="3" class="p-4 text-center">Không có dữ liệu</td></tr>';
                     return;
                 }
                 
-                // Chuyển object thành array để sort
                 const userArray = Object.keys(users).map(key => ({
                     uid: key,
                     ...users[key]
                 }));
 
-                // Sắp xếp: Admin lên đầu, sau đó đến user mới tạo nhất
+                // Sort: Admin -> Mới nhất
                 userArray.sort((a, b) => {
                     if (a.role === 'admin') return -1;
                     if (b.role === 'admin') return 1;
@@ -150,26 +196,29 @@
                     let actionHtml = '';
 
                     if (u.role === 'admin') {
-                        statusHtml = '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Admin Vĩnh viễn</span>';
-                        actionHtml = '<span class="text-xs text-gray-400 italic">Super Admin</span>';
+                        statusHtml = '<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-100 text-purple-800">Admin</span>';
+                        actionHtml = '<span class="text-xs text-gray-300 italic">No Action</span>';
                     } else {
                         if (isUserExpired) {
-                            statusHtml = '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Đã hết hạn</span>';
+                            statusHtml = '<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-red-100 text-red-800">Hết hạn</span>';
                         } else {
                             const daysLeft = Math.ceil((u.expired_at - now) / (1000 * 60 * 60 * 24));
-                            statusHtml = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Còn ${daysLeft} ngày</span>`;
+                            statusHtml = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-green-100 text-green-800">Còn ${daysLeft} ngày</span>`;
                         }
 
                         actionHtml = `
-                            <div class="flex gap-1">
-                                <button onclick="window.extendUser('${u.uid}', 7)" class="bg-white border border-slate-200 hover:bg-blue-50 text-blue-600 text-xs px-2 py-1 rounded shadow-sm transition-colors" title="Gia hạn 1 tuần">
-                                    +7 ngày
+                            <div class="flex gap-1 justify-end">
+                                <button onclick="window.extendUser('${u.uid}', 1)" class="bg-white border border-slate-200 hover:bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm transition-colors" title="Cộng 1 ngày">
+                                    +1D
                                 </button>
-                                <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border border-slate-200 hover:bg-indigo-50 text-indigo-600 text-xs px-2 py-1 rounded shadow-sm transition-colors" title="Gia hạn 1 tháng">
-                                    +30 ngày
+                                <button onclick="window.extendUser('${u.uid}', 7)" class="bg-white border border-slate-200 hover:bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm transition-colors" title="Cộng 7 ngày">
+                                    +7D
                                 </button>
-                                <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border border-slate-200 hover:bg-red-50 text-red-500 text-xs px-2 py-1 rounded shadow-sm transition-colors" title="Khóa ngay">
-                                    <i class="fa-solid fa-ban"></i>
+                                <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border border-slate-200 hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm transition-colors" title="Cộng 30 ngày">
+                                    +30D
+                                </button>
+                                <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border border-slate-200 hover:bg-red-50 text-red-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm transition-colors" title="Khóa ngay">
+                                    <i class="fa-solid fa-lock"></i>
                                 </button>
                             </div>
                         `;
@@ -179,24 +228,17 @@
                     row.className = "border-b border-slate-50 hover:bg-slate-50/50 transition-colors group";
                     row.innerHTML = `
                         <td class="p-3">
-                            <div class="font-medium text-slate-700 text-sm">${u.email}</div>
-                            <div class="text-[10px] text-slate-400 font-mono">${u.uid}</div>
+                            <div class="font-bold text-slate-700 text-xs">${u.email}</div>
+                            <div class="text-[9px] text-slate-400 font-mono mt-0.5">${u.uid}</div>
                         </td>
                         <td class="p-3">${statusHtml}</td>
                         <td class="p-3 text-right">${actionHtml}</td>
                     `;
                     listContainer.appendChild(row);
                 });
-            }, (error) => {
-                console.error("Admin Load Error:", error);
-                listContainer.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-red-500">
-                    <i class="fa-solid fa-triangle-exclamation"></i> Lỗi tải danh sách: Permission Denied.<br>
-                    <span class="text-xs text-gray-500">Hãy cập nhật Firebase Security Rules.</span>
-                </td></tr>`;
             });
         }
 
-        // Hàm xử lý gia hạn
         window.extendUser = (uid, days) => {
             if(!isAdmin) return;
             const userRef = ref(db, 'users/' + uid);
@@ -204,22 +246,19 @@
                 if(snapshot.exists()) {
                     const currentExpiry = snapshot.val().expired_at || Date.now();
                     const now = Date.now();
-                    // Nếu đã hết hạn thì cộng từ thời điểm hiện tại, nếu còn hạn thì cộng dồn
+                    // Nếu đã hết hạn thì cộng từ hiện tại, chưa hết thì cộng dồn
                     const baseTime = currentExpiry < now ? now : currentExpiry;
                     
                     let newExpiry;
                     if (days === -1) {
-                        newExpiry = now - 1000; // Khóa
+                        newExpiry = now - 1000; 
                     } else {
                         newExpiry = baseTime + (days * 24 * 60 * 60 * 1000);
                     }
 
                     update(userRef, { expired_at: newExpiry })
-                        .then(() => {
-                            // Không cần alert, UI sẽ tự update nhờ onValue
-                            console.log(`Updated user ${uid}`);
-                        })
-                        .catch(err => alert("Lỗi update: " + err.message));
+                        .then(() => console.log(`Updated user ${uid}`))
+                        .catch(err => alert("Lỗi: " + err.message));
                 }
             });
         };
@@ -257,21 +296,19 @@
             errorMsg.classList.add('hidden');
 
             try {
-                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...';
+                btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> ...';
                 if (type === 'register') {
                     const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-                    // Tạo profile ngay
                     await createNewUserProfile(userCredential.user.uid, email);
-                    alert("Đăng ký thành công! Đăng nhập ngay để sử dụng.");
-                    switchTab('login'); // Chuyển sang tab login
+                    alert("Đăng ký thành công! Vui lòng liên hệ Admin để kích hoạt.");
+                    switchTab('login');
                 } else {
                     await signInWithEmailAndPassword(auth, email, pass);
                 }
             } catch (error) {
                 let msg = error.message;
-                if(msg.includes('auth/invalid-credential')) msg = "Email hoặc mật khẩu không đúng.";
-                if(msg.includes('auth/email-already-in-use')) msg = "Email này đã được đăng ký.";
-                
+                if(msg.includes('invalid-credential')) msg = "Sai email hoặc mật khẩu.";
+                if(msg.includes('email-already-in-use')) msg = "Email đã tồn tại.";
                 errorMsg.innerText = msg;
                 errorMsg.classList.remove('hidden');
             } finally {
@@ -282,11 +319,11 @@
         // --- HELPERS ---
         window.handleAddClass = (e) => {
             e.preventDefault();
-            if (isExpired && !isAdmin) return alert("Tài khoản đã hết hạn! Vui lòng liên hệ Admin.");
+            if (isExpired && !isAdmin) return alert("Vui lòng kích hoạt tài khoản trước!");
             
             const urlInput = document.getElementById('class-url');
             const url = urlInput.value.trim();
-            if (!url || !url.includes('classid=')) return alert("Link không hợp lệ! (Phải chứa classid=...)");
+            if (!url || !url.includes('classid=')) return alert("Link không hợp lệ!");
 
             const newClassRef = push(ref(db, `requests/${currentUser.uid}`));
             set(newClassRef, { 
@@ -315,11 +352,11 @@
             const isError = data.slots === '?' || data.slots === 'Lỗi' || data.slots === 'Unknown';
             
             const card = document.createElement('div');
-            card.className = `bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-all relative overflow-hidden`;
+            card.className = `bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition-all relative overflow-hidden group`;
             
             let statusBadge = isAvail 
-                ? `<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Còn slot</span>`
-                : (isError ? `<span class="bg-yellow-100 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Đang check</span>` 
+                ? `<span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Có Slot</span>`
+                : (isError ? `<span class="bg-yellow-100 text-yellow-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Checking</span>` 
                            : `<span class="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Full</span>`);
 
             card.innerHTML = `
@@ -329,24 +366,22 @@
                             <span class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">${data.code}</span>
                             ${statusBadge}
                         </div>
-                        <h3 class="font-bold text-slate-800 text-sm leading-tight line-clamp-2" title="${data.name}">${data.name}</h3>
-                    </div>
-                    <div class="flex flex-col items-end gap-1">
-                        <span class="h-2 w-2 rounded-full ${isAvail ? 'bg-green-500 animate-ping' : 'bg-slate-300'}"></span>
+                        <h3 class="font-bold text-slate-800 text-sm leading-tight line-clamp-2 h-10" title="${data.name}">${data.name}</h3>
                     </div>
                 </div>
                 
                 <div class="bg-slate-50 rounded-lg p-2 mb-3 flex justify-between items-center border border-slate-100">
-                     <div class="text-xs text-slate-500">Mã ĐK: <span class="font-mono font-bold text-slate-700 select-all">${data.registration_code}</span></div>
+                     <div class="text-xs text-slate-500">Mã: <span class="font-mono font-bold text-slate-700 select-all">${data.registration_code}</span></div>
+                     <button onclick="navigator.clipboard.writeText('${data.registration_code}')" class="text-slate-400 hover:text-indigo-600"><i class="fa-regular fa-copy"></i></button>
                 </div>
 
                 <div class="flex justify-between items-end border-t border-slate-100 pt-3">
                     <div>
-                        <div class="text-[10px] text-slate-400 uppercase font-semibold">Slot trống</div>
+                        <div class="text-[10px] text-slate-400 uppercase font-semibold">Slot</div>
                         <div class="text-2xl font-black ${isAvail ? 'text-green-600' : 'text-slate-700'}">${data.slots}</div>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <div class="text-[10px] text-slate-400 italic">${data.last_check.split(' ')[0] || ''}</div>
+                    <div class="flex items-center gap-3 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <a href="${data.url}" target="_blank" class="text-blue-500 hover:text-blue-700 text-sm font-medium">Link</a>
                         <button onclick="window.deleteClass('${id}')" class="text-slate-300 hover:text-red-500 transition-colors p-1">
                             <i class="fa-solid fa-trash"></i>
                         </button>
@@ -356,23 +391,19 @@
             container.appendChild(card);
         }
 
-        // --- UI UTILS ---
         window.switchTab = (tab) => {
             const loginForm = document.getElementById('login-form');
             const regForm = document.getElementById('register-form');
             const tabLogin = document.getElementById('tab-login');
             const tabReg = document.getElementById('tab-register');
-
             if(tab === 'login') {
-                loginForm.classList.remove('hidden');
-                regForm.classList.add('hidden');
-                tabLogin.className = "flex-1 py-4 text-center font-bold text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50 transition-all";
-                tabReg.className = "flex-1 py-4 text-center font-medium text-slate-400 hover:text-slate-600 transition-all";
+                loginForm.classList.remove('hidden'); regForm.classList.add('hidden');
+                tabLogin.className = "flex-1 py-4 text-center font-bold text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50";
+                tabReg.className = "flex-1 py-4 text-center font-medium text-slate-400 hover:text-slate-600";
             } else {
-                loginForm.classList.add('hidden');
-                regForm.classList.remove('hidden');
-                tabReg.className = "flex-1 py-4 text-center font-bold text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50 transition-all";
-                tabLogin.className = "flex-1 py-4 text-center font-medium text-slate-400 hover:text-slate-600 transition-all";
+                loginForm.classList.add('hidden'); regForm.classList.remove('hidden');
+                tabReg.className = "flex-1 py-4 text-center font-bold text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50";
+                tabLogin.className = "flex-1 py-4 text-center font-medium text-slate-400 hover:text-slate-600";
             }
         }
         
@@ -383,49 +414,50 @@
 </head>
 <body class="text-slate-600 h-screen flex flex-col overflow-hidden">
 
+    <!-- GLOBAL POPUP MODAL -->
+    <div id="global-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-[bounce_0.5s_ease-out]">
+            <div class="bg-indigo-600 p-4 flex justify-between items-center">
+                <h3 id="popup-title" class="text-white font-bold text-lg"><i class="fa-solid fa-bell mr-2"></i>Thông báo</h3>
+                <button onclick="closeModal()" class="text-white/70 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6">
+                <p id="popup-content" class="text-slate-700 whitespace-pre-line leading-relaxed">...</p>
+            </div>
+            <div class="bg-slate-50 p-4 text-center border-t border-slate-100">
+                <button onclick="closeModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg shadow-indigo-200">Đã hiểu</button>
+            </div>
+        </div>
+    </div>
+
     <!-- AUTH SCREEN -->
     <div id="auth-container" class="flex-grow flex items-center justify-center p-4 bg-slate-50">
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-100">
             <div class="bg-indigo-600 p-8 text-center relative overflow-hidden">
                 <div class="absolute top-0 left-0 w-full h-full opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
                 <div class="relative z-10">
-                    <i class="fa-solid fa-crosshairs text-4xl text-white mb-2 animate-pulse"></i>
+                    <i class="fa-solid fa-crosshairs text-4xl text-white mb-2"></i>
                     <h1 class="text-2xl font-black text-white tracking-tight">DTU Sniper Pro</h1>
                     <p class="text-indigo-200 text-xs uppercase tracking-widest mt-1">SaaS Platform</p>
                 </div>
             </div>
-            
             <div class="flex border-b border-slate-100">
                 <button onclick="switchTab('login')" id="tab-login" class="flex-1 py-4 text-center font-bold text-indigo-600 border-b-2 border-indigo-600 bg-indigo-50/50">Đăng Nhập</button>
                 <button onclick="switchTab('register')" id="tab-register" class="flex-1 py-4 text-center font-medium text-slate-400">Đăng Ký</button>
             </div>
-
             <div class="p-8">
                 <form id="login-form" onsubmit="handleAuth(event, 'login')" class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label>
-                        <input type="email" id="login-email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Mật khẩu</label>
-                        <input type="password" id="login-pass" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" required>
-                    </div>
-                    <div id="login-error" class="text-red-500 text-xs bg-red-50 p-2 rounded border border-red-100 hidden"></div>
-                    <button id="login-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-200 transition-all transform hover:scale-[1.02]">Đăng Nhập</button>
+                    <input type="email" id="login-email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Email" required>
+                    <input type="password" id="login-pass" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Password" required>
+                    <div id="login-error" class="text-red-500 text-xs hidden"></div>
+                    <button id="login-btn" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl shadow-lg">Đăng Nhập</button>
                 </form>
-
                 <form id="register-form" onsubmit="handleAuth(event, 'register')" class="space-y-4 hidden">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Email của bạn</label>
-                        <input type="email" id="reg-email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" required>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tạo mật khẩu</label>
-                        <input type="password" id="reg-pass" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" required>
-                    </div>
-                    <div id="reg-error" class="text-red-500 text-xs bg-red-50 p-2 rounded border border-red-100 hidden"></div>
-                    <button id="reg-btn" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-slate-200 transition-all transform hover:scale-[1.02]">Đăng Ký Tài Khoản</button>
-                    <p class="text-center text-xs text-slate-400 mt-4">🎁 Tặng miễn phí 3 ngày dùng thử</p>
+                    <input type="email" id="reg-email" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Email đăng ký" required>
+                    <input type="password" id="reg-pass" class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Mật khẩu" required>
+                    <div id="reg-error" class="text-red-500 text-xs hidden"></div>
+                    <button id="reg-btn" class="w-full bg-slate-800 text-white font-bold py-3.5 rounded-xl shadow-lg">Đăng Ký</button>
+                    <p class="text-center text-xs text-slate-400 mt-2">Đăng ký xong tài khoản sẽ ở trạng thái chờ kích hoạt.</p>
                 </form>
             </div>
         </div>
@@ -433,52 +465,95 @@
 
     <!-- MAIN APP SCREEN -->
     <div id="app-container" class="hidden flex-grow flex flex-col h-full">
-        <!-- HEADER -->
-        <header class="bg-white border-b border-slate-200 sticky top-0 z-50 flex-none h-16">
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-40 flex-none h-16">
             <div class="max-w-7xl mx-auto px-4 w-full h-full flex justify-between items-center">
                 <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md shadow-indigo-200">
-                        <i class="fa-solid fa-crosshairs text-sm"></i>
-                    </div>
-                    <h1 class="text-lg font-bold text-slate-800 hidden sm:block tracking-tight">DTU Sniper Pro</h1>
+                    <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md"><i class="fa-solid fa-crosshairs text-sm"></i></div>
+                    <h1 class="text-lg font-bold text-slate-800 hidden sm:block">DTU Sniper Pro</h1>
                 </div>
                 <div class="flex items-center gap-4">
                     <div id="expiry-badge"></div>
                     <div id="user-email-display" class="hidden md:block text-right"></div>
                     <div class="h-8 w-[1px] bg-slate-200 mx-1"></div>
-                    <button onclick="logout()" class="text-slate-400 hover:text-red-500 transition-colors bg-slate-50 hover:bg-red-50 p-2 rounded-lg" title="Đăng xuất">
-                        <i class="fa-solid fa-right-from-bracket"></i>
-                    </button>
+                    <button onclick="logout()" class="text-slate-400 hover:text-red-500 p-2"><i class="fa-solid fa-right-from-bracket"></i></button>
                 </div>
             </div>
         </header>
 
-        <!-- CONTENT SCROLLABLE -->
-        <main class="flex-grow overflow-y-auto bg-slate-50/50">
+        <main class="flex-grow overflow-y-auto bg-slate-50/50 relative">
             <div class="max-w-7xl mx-auto px-4 py-8">
                 
-                <!-- ADMIN PANEL (Hidden by default) -->
-                <div id="admin-section" class="hidden mb-8">
+                <!-- CONTACT BANNER (Hiển thị khi hết hạn) -->
+                <div id="contact-banner" class="hidden mb-8 bg-gradient-to-r from-red-500 to-pink-600 rounded-2xl shadow-lg p-6 text-white relative overflow-hidden">
+                    <div class="absolute right-0 top-0 opacity-10 text-9xl transform translate-x-10 -translate-y-10"><i class="fa-solid fa-headset"></i></div>
+                    <div class="relative z-10 flex flex-col md:flex-row items-center gap-6">
+                        <div class="bg-white/20 p-4 rounded-full backdrop-blur-sm"><i class="fa-solid fa-lock text-3xl"></i></div>
+                        <div class="text-center md:text-left flex-grow">
+                            <h2 class="text-2xl font-bold mb-1">Tài khoản chưa kích hoạt hoặc đã hết hạn</h2>
+                            <p class="text-white/90 text-sm mb-4">Vui lòng liên hệ Admin để gia hạn và sử dụng tool săn slot tốc độ cao.</p>
+                            
+                            <div class="flex flex-wrap justify-center md:justify-start gap-3">
+                                <div class="bg-white/20 px-3 py-1.5 rounded-lg text-sm font-medium border border-white/30">
+                                    <i class="fa-solid fa-user mr-1"></i> Admin: Nguyễn Phát Đại
+                                </div>
+                                <a href="https://zalo.me/039632089" target="_blank" class="bg-blue-500 hover:bg-blue-600 px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg transition-all flex items-center gap-2">
+                                    <span class="font-black border-2 border-white rounded-full w-5 h-5 flex items-center justify-center text-[10px]">Z</span> Zalo: 039632089
+                                </a>
+                                <a href="https://www.facebook.com/phattdaii" target="_blank" class="bg-blue-700 hover:bg-blue-800 px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg transition-all">
+                                    <i class="fa-brands fa-facebook"></i> Facebook
+                                </a>
+                                <a href="https://t.me/Daidzvc" target="_blank" class="bg-sky-500 hover:bg-sky-600 px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg transition-all">
+                                    <i class="fa-brands fa-telegram"></i> Telegram
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADMIN PANEL -->
+                <div id="admin-section" class="hidden space-y-8 mb-8">
+                    <!-- Config Notification -->
+                    <div class="bg-white rounded-xl shadow-sm border border-orange-100 overflow-hidden">
+                         <div class="bg-orange-50 px-6 py-3 border-b border-orange-100 flex justify-between items-center">
+                            <h2 class="font-bold text-orange-800 text-sm uppercase tracking-wide"><i class="fa-solid fa-bullhorn mr-2"></i>Cấu hình Thông báo (Popup)</h2>
+                        </div>
+                        <div class="p-6 flex flex-col md:flex-row gap-6">
+                            <div class="flex-grow space-y-3">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tiêu đề</label>
+                                    <input type="text" id="admin-ann-title" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="VD: Thông báo bảo trì">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nội dung</label>
+                                    <textarea id="admin-ann-content" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nội dung hiển thị cho khách..."></textarea>
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-4 justify-start pt-6 min-w-[150px]">
+                                <label class="flex items-center cursor-pointer">
+                                    <input type="checkbox" id="admin-ann-toggle" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500 relative"></div>
+                                    <span class="ml-3 text-sm font-medium text-gray-900">Bật Popup</span>
+                                </label>
+                                <button onclick="saveAnnouncement()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-indigo-700">Lưu Cấu Hình</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Manager -->
                     <div class="bg-white rounded-xl shadow-sm border border-purple-100 overflow-hidden">
-                        <div class="bg-gradient-to-r from-purple-50 to-white px-6 py-4 border-b border-purple-100 flex justify-between items-center">
-                            <h2 class="font-bold text-purple-900 flex items-center gap-2">
-                                <span class="bg-purple-100 p-1.5 rounded-lg text-purple-600"><i class="fa-solid fa-users-gear"></i></span>
-                                Quản Lý Khách Hàng
-                            </h2>
-                            <span class="text-xs text-purple-400 font-medium uppercase tracking-wider">Admin Zone</span>
+                        <div class="bg-purple-50 px-6 py-3 border-b border-purple-100 flex justify-between items-center">
+                            <h2 class="font-bold text-purple-800 text-sm uppercase tracking-wide"><i class="fa-solid fa-users-gear mr-2"></i>Quản Lý Khách Hàng</h2>
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left border-collapse">
                                 <thead>
                                     <tr class="bg-slate-50 border-b border-slate-100 text-[10px] uppercase text-slate-400 font-bold tracking-wider">
-                                        <th class="p-3 pl-6">User Info</th>
-                                        <th class="p-3">Hạn sử dụng</th>
-                                        <th class="p-3 text-right pr-6">Thao tác</th>
+                                        <th class="p-3 pl-6">Khách hàng</th>
+                                        <th class="p-3">Trạng thái</th>
+                                        <th class="p-3 text-right pr-6">Gia hạn</th>
                                     </tr>
                                 </thead>
-                                <tbody id="user-list" class="divide-y divide-slate-50">
-                                    <!-- JS will inject rows here -->
-                                </tbody>
+                                <tbody id="user-list" class="divide-y divide-slate-50"></tbody>
                             </table>
                         </div>
                     </div>
@@ -491,10 +566,10 @@
                             <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-300">
                                 <i class="fa-solid fa-link"></i>
                             </div>
-                            <input type="text" id="class-url" class="block w-full pl-10 pr-4 py-3 border-none rounded-xl focus:ring-2 focus:ring-indigo-100 focus:bg-indigo-50/30 text-slate-700 placeholder-slate-400 transition-all font-medium" placeholder="Dán link lớp học (chứa classid) vào đây..." autocomplete="off">
+                            <input type="text" id="class-url" class="block w-full pl-10 pr-4 py-3 border-none rounded-xl focus:ring-2 focus:ring-indigo-100 focus:bg-indigo-50/30 text-slate-700 placeholder-slate-400 transition-all font-medium" placeholder="Dán link lớp học..." autocomplete="off">
                         </div>
                         <button onclick="handleAddClass(event)" id="add-class-btn" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md shadow-indigo-100 flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02]">
-                            <i class="fa-solid fa-plus"></i><span>Thêm Lớp</span>
+                            <i class="fa-solid fa-plus"></i><span>Thêm</span>
                         </button>
                     </div>
                 </div>
@@ -502,31 +577,20 @@
                 <!-- STATS -->
                 <div class="max-w-xl mx-auto grid grid-cols-2 gap-4 mb-8">
                     <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
-                            <i class="fa-solid fa-layer-group"></i>
-                        </div>
-                        <div>
-                            <div class="text-xs text-slate-400 font-bold uppercase tracking-wide">Tổng số lớp</div>
-                            <div class="text-2xl font-black text-slate-800" id="stat-total">0</div>
-                        </div>
+                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><i class="fa-solid fa-layer-group"></i></div>
+                        <div><div class="text-xs text-slate-400 font-bold uppercase tracking-wide">Tổng</div><div class="text-2xl font-black text-slate-800" id="stat-total">0</div></div>
                     </div>
                     <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-500">
-                            <i class="fa-regular fa-circle-check"></i>
-                        </div>
-                        <div>
-                            <div class="text-xs text-slate-400 font-bold uppercase tracking-wide">Có thể ĐK</div>
-                            <div class="text-2xl font-black text-green-600" id="stat-available">0</div>
-                        </div>
+                        <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-500"><i class="fa-regular fa-circle-check"></i></div>
+                        <div><div class="text-xs text-slate-400 font-bold uppercase tracking-wide">Có Slot</div><div class="text-2xl font-black text-green-600" id="stat-available">0</div></div>
                     </div>
                 </div>
 
                 <!-- CLASS GRID -->
                 <div id="class-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-20"></div>
-                
                 <div id="empty-state" class="hidden flex flex-col items-center justify-center py-20 text-slate-300">
                     <i class="fa-solid fa-clipboard-list text-6xl mb-4 opacity-50"></i>
-                    <p class="font-medium">Chưa có lớp nào được theo dõi</p>
+                    <p class="font-medium">Chưa có lớp nào</p>
                 </div>
             </div>
         </main>
