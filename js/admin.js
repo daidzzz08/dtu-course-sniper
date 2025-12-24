@@ -2,7 +2,6 @@ import { ref, onValue, set, get, update } from "https://www.gstatic.com/firebase
 import { db } from "./config.js";
 import { isAdmin } from "./auth.js";
 
-// --- LOAD SETTINGS ---
 export function loadAdminAnnouncementSettings() {
     if (!isAdmin) return;
     onValue(ref(db, 'system_settings/announcement'), (snapshot) => {
@@ -13,38 +12,21 @@ export function loadAdminAnnouncementSettings() {
     });
 }
 
-// --- SAVE SETTINGS ---
 export function saveAnnouncement() {
     if (!isAdmin) return;
-    
     const isActive = document.getElementById('admin-ann-toggle').checked;
     const title = document.getElementById('admin-ann-title').value;
     const content = document.getElementById('admin-ann-content').value;
     const btn = event.target; 
-    
     const originalText = btn.innerText;
-    btn.innerText = "Đang lưu...";
-    btn.disabled = true;
+    btn.innerText = "Đang lưu..."; btn.disabled = true;
 
     set(ref(db, 'system_settings/announcement'), {
-        is_active: isActive,
-        title: title,
-        content: content,
-        updated_at: Date.now()
-    })
-    .then(() => {
-        alert("✅ Đã lưu cấu hình thông báo!");
-        btn.innerText = originalText;
-        btn.disabled = false;
-    })
-    .catch((error) => {
-        alert("❌ Lỗi: " + error.message);
-        btn.innerText = originalText;
-        btn.disabled = false;
-    });
+        is_active: isActive, title: title, content: content, updated_at: Date.now()
+    }).then(() => { alert("✅ Đã lưu cấu hình!"); btn.innerText = originalText; btn.disabled = false; })
+      .catch((error) => { alert("❌ Lỗi: " + error.message); btn.innerText = originalText; btn.disabled = false; });
 }
 
-// --- RENDER USER TABLE ---
 export function renderAdminPanel() {
     if (!isAdmin) return;
     const listContainer = document.getElementById('user-list');
@@ -53,17 +35,9 @@ export function renderAdminPanel() {
     onValue(ref(db, 'users'), (snapshot) => {
         const users = snapshot.val();
         listContainer.innerHTML = ''; 
-
-        if (!users) {
-            listContainer.innerHTML = '<tr><td colspan="3" class="p-4 text-center">Empty</td></tr>';
-            return;
-        }
+        if (!users) { listContainer.innerHTML = '<tr><td colspan="3" class="p-4 text-center">Empty</td></tr>'; return; }
         
         const userArray = Object.keys(users).map(key => ({ uid: key, ...users[key] }));
-<<<<<<< HEAD
-=======
-        // Sắp xếp: Admin lên đầu -> Mới nhất -> Cũ nhất
->>>>>>> 8f3ea025e65b588facdae784801f6d82409cceb7
         userArray.sort((a, b) => {
             if (a.role === 'admin') return -1;
             if (b.role === 'admin') return 1;
@@ -72,61 +46,24 @@ export function renderAdminPanel() {
 
         userArray.forEach(u => {
             const now = Date.now();
-            const isUserExpired = u.expired_at < now;
-<<<<<<< HEAD
             const daysLeft = Math.ceil((u.expired_at - now) / (1000 * 60 * 60 * 24));
             
             let statusHtml = '';
             if (u.role === 'admin') statusHtml = '<span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded">ADMIN</span>';
-            else if (isUserExpired) statusHtml = '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">HẾT HẠN</span>';
+            else if (u.expired_at < now) statusHtml = '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">HẾT HẠN</span>';
             else statusHtml = `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded">CÒN ${daysLeft} NGÀY</span>`;
 
-            // Nút VIP Config
-            const vipBtn = u.role !== 'admin' ? `
-                <button onclick="window.openVipModal('${u.uid}')" class="bg-amber-100 hover:bg-amber-200 text-amber-700 w-8 h-8 rounded-lg flex items-center justify-center shadow-sm mr-2" title="Cấu hình VIP Auto-Reg">
-                    <i class="fa-solid fa-key"></i>
-                </button>
-            ` : '';
-
+            const vipBtn = u.role !== 'admin' ? `<button onclick="window.openVipModal('${u.uid}')" class="bg-amber-100 hover:bg-amber-200 text-amber-700 w-8 h-8 rounded-lg flex items-center justify-center shadow-sm mr-2" title="Cấu hình VIP"><i class="fa-solid fa-key"></i></button>` : '';
             const extendBtns = u.role !== 'admin' ? `
                 <button onclick="window.extendUser('${u.uid}', 1)" class="bg-white border hover:bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm mr-1">+1D</button>
-                <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+30D</button>
+                <button onclick="window.extendUser('${u.uid}', 7)" class="bg-white border hover:bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm mr-1">+7D</button>
+                <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm mr-1">+30D</button>
                 <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border hover:bg-red-50 text-red-500 px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-lock"></i></button>
-            ` : '<span class="text-xs text-gray-300">Super Admin</span>';
-=======
-            
-            // --- TÍNH TOÁN SỐ NGÀY CÒN LẠI ---
-            const daysLeft = Math.ceil((u.expired_at - now) / (1000 * 60 * 60 * 24));
-            
-            let statusHtml = '';
-            if (u.role === 'admin') {
-                statusHtml = '<span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded">ADMIN</span>';
-            } else if (isUserExpired) {
-                statusHtml = '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">HẾT HẠN</span>';
-            } else {
-                // Hiển thị số ngày cụ thể
-                statusHtml = `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded">CÒN ${daysLeft} NGÀY</span>`;
-            }
-
-            let actionHtml = u.role === 'admin' ? '' : `
-                <div class="flex gap-1 justify-end">
-                    <button onclick="window.extendUser('${u.uid}', 1)" class="bg-white border hover:bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 1 ngày">+1D</button>
-                    <button onclick="window.extendUser('${u.uid}', 7)" class="bg-white border hover:bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 7 ngày">+7D</button>
-                    <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 30 ngày">+30D</button>
-                    <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border hover:bg-red-50 text-red-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Khóa user"><i class="fa-solid fa-lock"></i></button>
-                </div>`;
->>>>>>> 8f3ea025e65b588facdae784801f6d82409cceb7
+            ` : '';
 
             const row = document.createElement('tr');
             row.className = "border-b border-slate-50 hover:bg-slate-50/50";
-            row.innerHTML = `
-                <td class="p-3"><div class="font-bold text-slate-700 text-xs">${u.email}</div><div class="text-[9px] text-slate-400 font-mono">${u.uid}</div></td>
-                <td class="p-3">${statusHtml}</td>
-                <td class="p-3 text-right flex justify-end items-center">
-                    ${vipBtn}
-                    ${extendBtns}
-                </td>
-            `;
+            row.innerHTML = `<td class="p-3"><div class="font-bold text-slate-700 text-xs">${u.email}</div><div class="text-[9px] text-slate-400 font-mono">${u.uid}</div></td><td class="p-3">${statusHtml}</td><td class="p-3 text-right flex justify-end items-center">${vipBtn}${extendBtns}</td>`;
             listContainer.appendChild(row);
         });
     });
@@ -139,34 +76,20 @@ export function extendUser(uid, days) {
         if (snapshot.exists()) {
             const currentExpiry = snapshot.val().expired_at || Date.now();
             const now = Date.now();
-            
-            // Logic cộng dồn: Nếu còn hạn thì cộng tiếp vào ngày hết hạn cũ. Nếu hết hạn thì tính từ bây giờ.
             const baseTime = currentExpiry < now ? now : currentExpiry;
-            
-            let newExpiry;
-            if (days === -1) {
-                newExpiry = now - 1000; // Khóa ngay (set về quá khứ)
-            } else {
-                newExpiry = baseTime + (days * 24 * 60 * 60 * 1000);
-            }
-            
+            let newExpiry = days === -1 ? now - 1000 : baseTime + (days * 24 * 60 * 60 * 1000);
             update(userRef, { expired_at: newExpiry });
         }
     });
 }
-<<<<<<< HEAD
 
-// --- VIP MODAL LOGIC ---
 export function openVipModal(uid) {
     if(!isAdmin) return;
     document.getElementById('vip-uid').value = uid;
-    
-    // Reset form
     document.getElementById('vip-student-id').value = '';
     document.getElementById('vip-student-pass').value = '';
     document.getElementById('vip-active-toggle').checked = false;
 
-    // Load data hiện tại (nếu có)
     get(ref(db, `users/${uid}/student_account`)).then(snap => {
         if(snap.exists()) {
             const data = snap.val();
@@ -174,37 +97,18 @@ export function openVipModal(uid) {
             document.getElementById('vip-student-pass').value = data.pass || '';
         }
     });
-    
-    get(ref(db, `users/${uid}/is_vip`)).then(snap => {
-        if(snap.exists()) {
-            document.getElementById('vip-active-toggle').checked = snap.val();
-        }
-    });
-
+    get(ref(db, `users/${uid}/is_vip`)).then(snap => { if(snap.exists()) document.getElementById('vip-active-toggle').checked = snap.val(); });
     document.getElementById('vip-modal').classList.remove('hidden');
 }
-
-export function closeVipModal() {
-    document.getElementById('vip-modal').classList.add('hidden');
-}
-
+export function closeVipModal() { document.getElementById('vip-modal').classList.add('hidden'); }
 export function saveVipConfig() {
     if(!isAdmin) return;
     const uid = document.getElementById('vip-uid').value;
     const stdId = document.getElementById('vip-student-id').value;
     const stdPass = document.getElementById('vip-student-pass').value;
     const isVip = document.getElementById('vip-active-toggle').checked;
-
     const updates = {};
     updates[`users/${uid}/student_account`] = { id: stdId, pass: stdPass };
     updates[`users/${uid}/is_vip`] = isVip;
-
-    update(ref(db), updates)
-        .then(() => {
-            alert("✅ Đã lưu cấu hình VIP thành công!");
-            closeVipModal();
-        })
-        .catch(err => alert("❌ Lỗi: " + err.message));
+    update(ref(db), updates).then(() => { alert("✅ Đã lưu!"); closeVipModal(); }).catch(err => alert("❌ Lỗi: " + err.message));
 }
-=======
->>>>>>> 8f3ea025e65b588facdae784801f6d82409cceb7

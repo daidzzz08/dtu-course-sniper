@@ -2,20 +2,16 @@ name: DTU Sniper 24/7 Swarm
 
 on:
   schedule:
-    # Chạy mỗi 6 tiếng (Vào lúc 0h, 6h, 12h, 18h UTC)
-    # Worker sẽ tự chạy vòng lặp trong 5h50p rồi tắt để nhường chỗ cho job sau
     - cron: '0 */6 * * *'
-  workflow_dispatch: # Cho phép bấm nút chạy thủ công để test hoặc khởi động lại
+  workflow_dispatch:
 
 jobs:
   long_running_swarm:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false # Nếu 1 worker lỗi, các worker khác vẫn chạy tiếp
+      fail-fast: false
       matrix:
-        # Số lượng Worker chạy song song (Ở đây là 3 worker: ID 0, 1, 2)
-        # Bạn có thể thêm số vào mảng này nếu muốn chạy nhiều hơn (VD: [0, 1, 2, 3, 4])
-        worker_id: [0, 1, 2, 3, 4]
+        worker_id: [0, 1, 2]
 
     steps:
     - name: Checkout code
@@ -33,18 +29,12 @@ jobs:
 
     - name: Run Infinite Loop Worker
       env:
-        # --- CẤU HÌNH BÍ MẬT (Lấy từ Settings -> Secrets) ---
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         FIREBASE_SECRET: ${{ secrets.FIREBASE_SECRET }}
-        
-        # --- CẤU HÌNH TRIGGER REPO B (AUTO-REG) ---
         REPO_B_PAT: ${{ secrets.REPO_B_PAT }}
-        REPO_B_OWNER: 'daidzzz08'       # Tên user GitHub của bạn
-        REPO_B_NAME: 'auto-register-class' # Tên repo B
-        # ------------------------------------------
-
-        # --- CẤU HÌNH WORKER ---
+        REPO_B_OWNER: 'daidzzz08'
+        REPO_B_NAME: 'auto-register-class'
         WORKER_ID: ${{ matrix.worker_id }}
-        TOTAL_WORKERS: 5 # Phải khớp với số lượng phần tử trong matrix.worker_id
+        TOTAL_WORKERS: 3
       run: python checker.py

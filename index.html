@@ -12,7 +12,7 @@
 </head>
 <body class="text-slate-600 h-screen flex flex-col overflow-hidden">
 
-    <!-- GLOBAL POPUP MODAL (ANNOUNCEMENT) -->
+    <!-- POPUP MODAL -->
     <div id="global-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-[bounce_0.5s_ease-out]">
             <div class="bg-indigo-600 p-4 flex justify-between items-center">
@@ -28,7 +28,7 @@
         </div>
     </div>
 
-    <!-- VIP CONFIG MODAL (ADMIN ONLY) -->
+    <!-- VIP CONFIG MODAL -->
     <div id="vip-modal" class="hidden fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200">
             <div class="bg-gradient-to-r from-amber-500 to-orange-600 p-4 flex justify-between items-center">
@@ -36,21 +36,16 @@
                 <button onclick="closeVipModal()" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
             </div>
             <div class="p-6 space-y-4">
-                <p class="text-xs text-slate-500 text-center mb-4">Cài đặt tài khoản MyDTU để kích hoạt tính năng tự động đăng ký cho khách hàng này.</p>
-                <input type="hidden" id="vip-uid"> <!-- Lưu UID tạm -->
-                
+                <p class="text-xs text-slate-500 text-center mb-4">Cài đặt tài khoản MyDTU để kích hoạt tính năng tự động đăng ký.</p>
+                <input type="hidden" id="vip-uid">
                 <div>
                     <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Mã Sinh Viên</label>
-                    <input type="text" id="vip-student-id" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="VD: 24211...">
+                    <input type="text" id="vip-student-id" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500" placeholder="VD: 24211...">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Mật khẩu MyDTU</label>
-                    <div class="relative">
-                        <input type="text" id="vip-student-pass" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="Nhập mật khẩu...">
-                        <div class="absolute right-3 top-2 text-xs text-slate-400"><i class="fa-solid fa-eye"></i></div>
-                    </div>
+                    <input type="text" id="vip-student-pass" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-500" placeholder="Nhập mật khẩu...">
                 </div>
-                
                 <div class="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
                     <span class="text-sm font-bold text-slate-700">Kích hoạt Auto-Reg</span>
                     <label class="relative inline-flex items-center cursor-pointer">
@@ -143,8 +138,8 @@
                         </div>
                         <div class="p-6 flex flex-col md:flex-row gap-6">
                             <div class="flex-grow space-y-3">
-                                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tiêu đề</label><input type="text" id="admin-ann-title" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="VD: Thông báo bảo trì"></div>
-                                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nội dung</label><textarea id="admin-ann-content" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="Nội dung hiển thị cho khách..."></textarea></div>
+                                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tiêu đề</label><input type="text" id="admin-ann-title" class="w-full border rounded-lg px-3 py-2 text-sm"></div>
+                                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nội dung</label><textarea id="admin-ann-content" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm"></textarea></div>
                             </div>
                             <div class="flex flex-col gap-4 justify-start pt-6 min-w-[150px]">
                                 <label class="flex items-center cursor-pointer">

@@ -36,12 +36,10 @@ export function listenToClasses(uid) {
             document.getElementById('empty-state').classList.remove('hidden');
             return; 
         }
-        
         document.getElementById('empty-state').classList.add('hidden');
         
         let total = 0;
         let avail = 0;
-        
         Object.keys(data).forEach(key => {
             if (typeof data[key] === 'object') {
                 total++;
@@ -49,7 +47,6 @@ export function listenToClasses(uid) {
                 container.innerHTML += createClassCard(key, data[key]);
             }
         });
-        
         updateStats(total, avail);
     });
 }
