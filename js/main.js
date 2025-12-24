@@ -3,9 +3,9 @@ import { auth } from "./config.js";
 import { handleAuth, checkUserStatus, logout, loadSystemAnnouncement } from "./auth.js";
 import { switchTab, closeModal } from "./ui.js";
 import { handleAddClass, deleteClass } from "./app.js";
-import { saveAnnouncement, extendUser } from "./admin.js";
+import { saveAnnouncement, extendUser, openVipModal, closeVipModal, saveVipConfig } from "./admin.js";
 
-// --- GÁN HÀM VÀO WINDOW (ĐỂ HTML GỌI ĐƯỢC ONCLICK) ---
+// --- GÁN HÀM VÀO WINDOW ---
 window.handleAuth = handleAuth;
 window.switchTab = switchTab;
 window.closeModal = closeModal;
@@ -15,13 +15,17 @@ window.deleteClass = deleteClass;
 window.saveAnnouncement = saveAnnouncement;
 window.extendUser = extendUser;
 
-// --- KHỞI CHẠY APP ---
+// New VIP Functions
+window.openVipModal = openVipModal;
+window.closeVipModal = closeVipModal;
+window.saveVipConfig = saveVipConfig;
+
+// --- INIT ---
 onAuthStateChanged(auth, (user) => {
     if (user) {
         checkUserStatus(user.uid);
         loadSystemAnnouncement();
     } else {
-        // Chưa đăng nhập -> Hiện màn hình Login
         document.getElementById('auth-container').classList.remove('hidden');
         document.getElementById('app-container').classList.add('hidden');
     }

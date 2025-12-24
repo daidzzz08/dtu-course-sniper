@@ -7,15 +7,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- QUAN TRỌNG: Import file main.js -->
     <script type="module" src="./js/main.js"></script>
-
     <style>body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }</style>
 </head>
 <body class="text-slate-600 h-screen flex flex-col overflow-hidden">
 
-    <!-- POPUP MODAL -->
+    <!-- GLOBAL POPUP MODAL (ANNOUNCEMENT) -->
     <div id="global-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-[bounce_0.5s_ease-out]">
             <div class="bg-indigo-600 p-4 flex justify-between items-center">
@@ -27,6 +24,43 @@
             </div>
             <div class="bg-slate-50 p-4 text-center border-t border-slate-100">
                 <button onclick="closeModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg">Đã hiểu</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIP CONFIG MODAL (ADMIN ONLY) -->
+    <div id="vip-modal" class="hidden fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200">
+            <div class="bg-gradient-to-r from-amber-500 to-orange-600 p-4 flex justify-between items-center">
+                <h3 class="text-white font-bold text-lg"><i class="fa-solid fa-crown mr-2"></i>Cấu hình VIP</h3>
+                <button onclick="closeVipModal()" class="text-white/80 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-xs text-slate-500 text-center mb-4">Cài đặt tài khoản MyDTU để kích hoạt tính năng tự động đăng ký cho khách hàng này.</p>
+                <input type="hidden" id="vip-uid"> <!-- Lưu UID tạm -->
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Mã Sinh Viên</label>
+                    <input type="text" id="vip-student-id" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="VD: 24211...">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Mật khẩu MyDTU</label>
+                    <div class="relative">
+                        <input type="text" id="vip-student-pass" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none" placeholder="Nhập mật khẩu...">
+                        <div class="absolute right-3 top-2 text-xs text-slate-400"><i class="fa-solid fa-eye"></i></div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between pt-2 border-t border-slate-100 mt-2">
+                    <span class="text-sm font-bold text-slate-700">Kích hoạt Auto-Reg</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="vip-active-toggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                    </label>
+                </div>
+            </div>
+            <div class="bg-slate-50 p-4 flex gap-2">
+                <button onclick="saveVipConfig()" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg font-bold shadow-md transition-all">Lưu Cấu Hình</button>
             </div>
         </div>
     </div>
@@ -93,7 +127,7 @@
                             <p class="text-white/90 text-sm mb-4">Vui lòng liên hệ Admin để gia hạn và sử dụng tool.</p>
                             <div class="flex flex-wrap justify-center md:justify-start gap-3">
                                 <div class="bg-white/20 px-3 py-1.5 rounded-lg text-sm font-medium border border-white/30"><i class="fa-solid fa-user mr-1"></i> Admin: Nguyễn Phát Đại</div>
-                                <a href="https://zalo.me/daidzvcl" target="_blank" class="bg-blue-500 hover:bg-blue-600 px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2"><span class="font-black border-2 border-white rounded-full w-5 h-5 flex items-center justify-center text-[10px]">Z</span> Zalo: 0396132089</a>
+                                <a href="https://zalo.me/039632089" target="_blank" class="bg-blue-500 hover:bg-blue-600 px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg flex items-center gap-2"><span class="font-black border-2 border-white rounded-full w-5 h-5 flex items-center justify-center text-[10px]">Z</span> Zalo</a>
                                 <a href="https://www.facebook.com/phattdaii" target="_blank" class="bg-blue-700 hover:bg-blue-800 px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg"><i class="fa-brands fa-facebook"></i> Facebook</a>
                                 <a href="https://t.me/Daidzvc" target="_blank" class="bg-sky-500 hover:bg-sky-600 px-4 py-1.5 rounded-lg text-sm font-bold shadow-lg"><i class="fa-brands fa-telegram"></i> Telegram</a>
                             </div>
@@ -125,7 +159,7 @@
 
                     <div class="bg-white rounded-xl shadow-sm border border-purple-100 overflow-hidden">
                         <div class="bg-purple-50 px-6 py-3 border-b border-purple-100 flex justify-between items-center"><h2 class="font-bold text-purple-800 text-sm uppercase tracking-wide"><i class="fa-solid fa-users-gear mr-2"></i>Quản Lý Khách Hàng</h2></div>
-                        <div class="overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="bg-slate-50 border-b border-slate-100 text-[10px] uppercase text-slate-400 font-bold tracking-wider"><th class="p-3 pl-6">Khách hàng</th><th class="p-3">Trạng thái</th><th class="p-3 text-right pr-6">Gia hạn</th></tr></thead><tbody id="user-list" class="divide-y divide-slate-50"></tbody></table></div>
+                        <div class="overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="bg-slate-50 border-b border-slate-100 text-[10px] uppercase text-slate-400 font-bold tracking-wider"><th class="p-3 pl-6">Khách hàng</th><th class="p-3">Trạng thái</th><th class="p-3 text-right pr-6">Hành động</th></tr></thead><tbody id="user-list" class="divide-y divide-slate-50"></tbody></table></div>
                     </div>
                 </div>
 

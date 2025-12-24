@@ -10,17 +10,22 @@ from email.mime.text import MIMEText
 import os
 import sys
 
-# --- CONFIG ---
+# --- CONFIG FIREBASE ---
 FIREBASE_BASE_URL = "https://tool-theo-doi-slot-default-rtdb.asia-southeast1.firebasedatabase.app"
-SLEEP_INTERVAL = 300  # Thời gian nghỉ giữa các lần quét (300s = 5 phút)
-MAX_RUNTIME = 5 * 60 * 60 + 50 * 60  # 5 giờ 50 phút (Gần giới hạn 6h của GitHub)
+SLEEP_INTERVAL = 300  # 5 phút
+MAX_RUNTIME = 5 * 60 * 60 + 50 * 60 # 5h50p
 
-# Lấy bí mật từ Environment
+# --- SECRETS TỪ GITHUB ---
 EMAIL_USER = os.environ.get('EMAIL_USER') 
 EMAIL_PASSWORD = os.environ.get('EMAIL_PASSWORD')
 FIREBASE_SECRET = os.environ.get('FIREBASE_SECRET') 
 
-# Lấy thông tin Worker từ Matrix
+# --- CẤU HÌNH TRIGGER REPO B ---
+REPO_B_OWNER = os.environ.get('REPO_B_OWNER', 'daidzzz08')
+REPO_B_NAME = os.environ.get('REPO_B_NAME', 'auto-register-class')
+REPO_B_PAT = os.environ.get('REPO_B_PAT') # Token quan trọng
+
+# --- MATRIX CONFIG ---
 try:
     WORKER_ID = int(os.environ.get('WORKER_ID', 0))
     TOTAL_WORKERS = int(os.environ.get('TOTAL_WORKERS', 1))
@@ -40,20 +45,49 @@ def get_current_time():
 def get_auth_param():
     return f"?auth={FIREBASE_SECRET}" if FIREBASE_SECRET else ""
 
+# --- HÀM BẮN TÍN HIỆU SANG REPO B ---
+def trigger_auto_reg(uid, class_code, reg_code):
+    if not REPO_B_PAT:
+        print("   ⚠️ Không có Token (REPO_B_PAT), bỏ qua Auto-Reg.")
+        return False
+
+    url = f"https://api.github.com/repos/{REPO_B_OWNER}/{REPO_B_NAME}/dispatches"
+    
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": f"token {REPO_B_PAT}"
+    }
+    
+    payload = {
+        "event_type": "trigger_registration",
+        "client_payload": {
+            "uid": uid,
+            "class_code": class_code,
+            "reg_code": reg_code
+        }
+    }
+
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=10)
+        if resp.status_code == 204:
+            print(f"   🚀 Đã kích hoạt Auto-Reg thành công cho {class_code}!")
+            return True
+        else:
+            print(f"   ❌ Lỗi kích hoạt Repo B: {resp.status_code} - {resp.text}")
+            return False
+    except Exception as e:
+        print(f"   ❌ Lỗi kết nối GitHub API: {e}")
+        return False
+
 def send_email(to_email, class_name, slots, url, reg_code):
     if not EMAIL_USER or not EMAIL_PASSWORD: return False
     
     subject = f"🔥 CÓ SLOT: {class_name} ({slots} chỗ)"
     body = f"""
     Hệ thống DTU Sniper Pro thông báo:
-    
-    Lớp học: {class_name}
-    Mã ĐK: {reg_code}
-    Số chỗ trống: {slots}
-    
-    Link đăng ký: {url}
-    
-    (Email tự động, vui lòng không trả lời)
+    Lớp: {class_name} - Mã ĐK: {reg_code}
+    Số chỗ: {slots}
+    Link: {url}
     """
     msg = MIMEText(body)
     msg['Subject'] = subject
@@ -61,13 +95,11 @@ def send_email(to_email, class_name, slots, url, reg_code):
     msg['To'] = to_email
 
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(EMAIL_USER, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_USER, to_email, msg.as_string())
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+            s.login(EMAIL_USER, EMAIL_PASSWORD)
+            s.sendmail(EMAIL_USER, to_email, msg.as_string())
         return True
-    except Exception as e:
-        print(f"      ❌ Mail error: {e}")
-        return False
+    except: return False
 
 def check_one_class(url):
     try:
@@ -100,115 +132,95 @@ def check_one_class(url):
     except: return None, None, None, None
 
 def run_batch():
-    """Hàm chạy 1 lượt quét"""
     print(f"\n[{get_current_time()}] --- BATCH STARTED (Worker {WORKER_ID}) ---")
-    
     auth_suffix = get_auth_param()
     
-    # 1. Tải TOÀN BỘ dữ liệu
     try:
         users_resp = requests.get(f"{FIREBASE_BASE_URL}/users.json{auth_suffix}")
-        all_requests_resp = requests.get(f"{FIREBASE_BASE_URL}/requests.json{auth_suffix}")
-        
+        all_reqs_resp = requests.get(f"{FIREBASE_BASE_URL}/requests.json{auth_suffix}")
         users_data = users_resp.json() or {}
-        requests_data = all_requests_resp.json() or {}
+        reqs_data = all_reqs_resp.json() or {}
     except Exception as e:
-        print(f"❌ Init Error: {e}")
-        return
+        print(f"❌ DB Error: {e}"); return
 
-    # 2. Gom nhóm Request (De-duplication)
-    unique_tasks_map = {}
+    # De-duplication Map
+    unique_map = {}
+    for uid, u_reqs in reqs_data.items():
+        u_info = users_data.get(uid)
+        if not u_info: continue
+        if u_info.get('expired_at', 0) < time.time()*1000: continue
 
-    for uid, user_reqs in requests_data.items():
-        user_info = users_data.get(uid)
-        if not user_info: continue
-        expired_at = user_info.get('expired_at', 0)
-        if expired_at < time.time() * 1000: continue # User hết hạn
+        if not isinstance(u_reqs, dict): continue
+        for r_id, r_info in u_reqs.items():
+            if not isinstance(r_info, dict): continue
+            url = r_info.get('url')
+            if url:
+                if url not in unique_map: unique_map[url] = []
+                unique_map[url].append({
+                    'uid': uid, 'email': u_info.get('email'), 
+                    'req_id': r_id, 'info': r_info,
+                    # Lấy thông tin VIP
+                    'is_vip': u_info.get('is_vip', False),
+                    'has_acc': 'student_account' in u_info
+                })
 
-        if not isinstance(user_reqs, dict): continue
+    unique_urls = list(unique_map.keys())
+    my_tasks = [u for i, u in enumerate(unique_urls) if i % TOTAL_WORKERS == WORKER_ID]
+    print(f"🐜 Task: {len(my_tasks)} links.")
 
-        for req_id, req_info in user_reqs.items():
-            if not isinstance(req_info, dict): continue
-            url = req_info.get('url')
-            if not url: continue
-
-            if url not in unique_tasks_map:
-                unique_tasks_map[url] = []
-            
-            unique_tasks_map[url].append({
-                'uid': uid,
-                'email': user_info.get('email'),
-                'req_id': req_id,
-                'info': req_info
-            })
-
-    unique_urls = list(unique_tasks_map.keys())
-    
-    # 3. Phân chia công việc (Sharding Logic)
-    my_tasks = []
-    for i, url in enumerate(unique_urls):
-        if i % TOTAL_WORKERS == WORKER_ID:
-            my_tasks.append(url)
-
-    print(f"🐜 Nhiệm vụ: {len(my_tasks)} links.")
-
-    # 4. Thực thi
-    for i, url in enumerate(my_tasks):
-        subscribers = unique_tasks_map[url]
-        # print(f"Checking Link: ...{url[-20:]}")
-        
+    for url in my_tasks:
         name, code, reg_code, slots = check_one_class(url)
+        if not name: continue
         
-        if not name:
-            continue
-            
         curr_slots = int(slots) if slots.isdigit() else 0
+        subs = unique_map[url]
 
-        # CẬP NHẬT CHO TẤT CẢ USER ĐĂNG KÝ LINK NÀY
-        for sub in subscribers:
-            uid = sub['uid']
-            req_id = sub['req_id']
-            email = sub['email']
+        for sub in subs:
+            # Logic thông báo & Trigger
             old_notified = sub['info'].get('notification_sent', False)
+            # Cờ mới: Đã trigger auto-reg chưa?
+            old_triggered = sub['info'].get('autoreg_triggered', False)
             
             new_notified = old_notified
+            new_triggered = old_triggered
 
             if curr_slots > 0:
+                # 1. Gửi Email (Nếu chưa báo)
                 if not old_notified:
-                    print(f"      🔥 Alerting {email}...")
-                    if send_email(email, name, slots, url, reg_code):
+                    print(f"      📧 Emailing {sub['email']}...")
+                    if send_email(sub['email'], name, slots, url, reg_code):
                         new_notified = True
+                
+                # 2. Trigger Auto-Reg (Nếu là VIP, có tài khoản và CHƯA trigger lần nào trong đợt slot này)
+                if sub['is_vip'] and sub['has_acc'] and not old_triggered:
+                    print(f"      👑 VIP DETECTED: {sub['email']} -> Triggering Auto-Reg...")
+                    if trigger_auto_reg(sub['uid'], code, reg_code):
+                        new_triggered = True
             else:
+                # Hết slot -> Reset các cờ để lần sau có slot thì báo lại/trigger lại
                 if old_notified: new_notified = False
+                if old_triggered: new_triggered = False
 
+            # Update DB
             patch_data = {
                 "last_check": get_current_time(),
                 "name": name, "code": code, "registration_code": reg_code, "slots": slots,
-                "notification_sent": new_notified
+                "notification_sent": new_notified,
+                "autoreg_triggered": new_triggered
             }
             try:
-                requests.patch(f"{FIREBASE_BASE_URL}/requests/{uid}/{req_id}.json{auth_suffix}", json=patch_data, timeout=5)
+                requests.patch(f"{FIREBASE_BASE_URL}/requests/{sub['uid']}/{sub['req_id']}.json{auth_suffix}", json=patch_data, timeout=5)
             except: pass
         
-        time.sleep(1) # Nghỉ nhẹ giữa các link
+        time.sleep(1)
 
 def main_loop():
-    print(f"🚀 WORKER {WORKER_ID}/{TOTAL_WORKERS} STARTING INFINITE LOOP...")
+    print(f"🚀 WORKER {WORKER_ID}/{TOTAL_WORKERS} RUNNING...")
     start_time = time.time()
-    
     while True:
-        # Kiểm tra thời gian chạy
-        elapsed = time.time() - start_time
-        if elapsed > MAX_RUNTIME:
-            print(f"🛑 Đã chạy đủ {elapsed/3600:.2f} giờ. Tự thoát để nhường slot mới.")
-            break
-            
-        # Chạy 1 lượt quét
+        if time.time() - start_time > MAX_RUNTIME: break
         run_batch()
-        
-        # Ngủ nghỉ
-        print(f"💤 Sleeping {SLEEP_INTERVAL}s...")
-        time.sleep(SLEEP_INTERVAL)
+        print(f"💤 Sleep {SLEEP_INTERVAL}s..."); time.sleep(SLEEP_INTERVAL)
 
 if __name__ == "__main__":
     main_loop()

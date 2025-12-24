@@ -60,37 +60,50 @@ export function renderAdminPanel() {
         }
         
         const userArray = Object.keys(users).map(key => ({ uid: key, ...users[key] }));
-        userArray.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+        userArray.sort((a, b) => {
+            if (a.role === 'admin') return -1;
+            if (b.role === 'admin') return 1;
+            return (b.created_at || 0) - (a.created_at || 0);
+        });
 
         userArray.forEach(u => {
             const now = Date.now();
             const isUserExpired = u.expired_at < now;
-            let statusHtml = u.role === 'admin' 
-                ? '<span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded">ADMIN</span>'
-                : (isUserExpired ? '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">HẾT HẠN</span>' 
-                : `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded">CÒN HẠN</span>`);
+            const daysLeft = Math.ceil((u.expired_at - now) / (1000 * 60 * 60 * 24));
+            
+            let statusHtml = '';
+            if (u.role === 'admin') statusHtml = '<span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded">ADMIN</span>';
+            else if (isUserExpired) statusHtml = '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">HẾT HẠN</span>';
+            else statusHtml = `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded">CÒN ${daysLeft} NGÀY</span>`;
 
-            let actionHtml = u.role === 'admin' ? '' : `
-                <div class="flex gap-1 justify-end">
-                    <button onclick="window.extendUser('${u.uid}', 1)" class="bg-white border hover:bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+1D</button>
-                    <button onclick="window.extendUser('${u.uid}', 7)" class="bg-white border hover:bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+7D</button>
-                    <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+30D</button>
-                    <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border hover:bg-red-50 text-red-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-lock"></i></button>
-                </div>`;
+            // Nút VIP Config
+            const vipBtn = u.role !== 'admin' ? `
+                <button onclick="window.openVipModal('${u.uid}')" class="bg-amber-100 hover:bg-amber-200 text-amber-700 w-8 h-8 rounded-lg flex items-center justify-center shadow-sm mr-2" title="Cấu hình VIP Auto-Reg">
+                    <i class="fa-solid fa-key"></i>
+                </button>
+            ` : '';
+
+            const extendBtns = u.role !== 'admin' ? `
+                <button onclick="window.extendUser('${u.uid}', 1)" class="bg-white border hover:bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm mr-1">+1D</button>
+                <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+30D</button>
+                <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border hover:bg-red-50 text-red-500 px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-lock"></i></button>
+            ` : '<span class="text-xs text-gray-300">Super Admin</span>';
 
             const row = document.createElement('tr');
             row.className = "border-b border-slate-50 hover:bg-slate-50/50";
             row.innerHTML = `
                 <td class="p-3"><div class="font-bold text-slate-700 text-xs">${u.email}</div><div class="text-[9px] text-slate-400 font-mono">${u.uid}</div></td>
                 <td class="p-3">${statusHtml}</td>
-                <td class="p-3 text-right">${actionHtml}</td>
+                <td class="p-3 text-right flex justify-end items-center">
+                    ${vipBtn}
+                    ${extendBtns}
+                </td>
             `;
             listContainer.appendChild(row);
         });
     });
 }
 
-// --- EXTEND USER FUNCTION ---
 export function extendUser(uid, days) {
     if (!isAdmin) return;
     const userRef = ref(db, 'users/' + uid);
@@ -103,4 +116,55 @@ export function extendUser(uid, days) {
             update(userRef, { expired_at: newExpiry });
         }
     });
+}
+
+// --- VIP MODAL LOGIC ---
+export function openVipModal(uid) {
+    if(!isAdmin) return;
+    document.getElementById('vip-uid').value = uid;
+    
+    // Reset form
+    document.getElementById('vip-student-id').value = '';
+    document.getElementById('vip-student-pass').value = '';
+    document.getElementById('vip-active-toggle').checked = false;
+
+    // Load data hiện tại (nếu có)
+    get(ref(db, `users/${uid}/student_account`)).then(snap => {
+        if(snap.exists()) {
+            const data = snap.val();
+            document.getElementById('vip-student-id').value = data.id || '';
+            document.getElementById('vip-student-pass').value = data.pass || '';
+        }
+    });
+    
+    get(ref(db, `users/${uid}/is_vip`)).then(snap => {
+        if(snap.exists()) {
+            document.getElementById('vip-active-toggle').checked = snap.val();
+        }
+    });
+
+    document.getElementById('vip-modal').classList.remove('hidden');
+}
+
+export function closeVipModal() {
+    document.getElementById('vip-modal').classList.add('hidden');
+}
+
+export function saveVipConfig() {
+    if(!isAdmin) return;
+    const uid = document.getElementById('vip-uid').value;
+    const stdId = document.getElementById('vip-student-id').value;
+    const stdPass = document.getElementById('vip-student-pass').value;
+    const isVip = document.getElementById('vip-active-toggle').checked;
+
+    const updates = {};
+    updates[`users/${uid}/student_account`] = { id: stdId, pass: stdPass };
+    updates[`users/${uid}/is_vip`] = isVip;
+
+    update(ref(db), updates)
+        .then(() => {
+            alert("✅ Đã lưu cấu hình VIP thành công!");
+            closeVipModal();
+        })
+        .catch(err => alert("❌ Lỗi: " + err.message));
 }
