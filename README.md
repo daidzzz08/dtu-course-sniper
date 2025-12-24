@@ -1,23 +1,68 @@
-DTU Course Sniper Pro 🎯
-Hệ thống săn slot tín chỉ tự động dành cho sinh viên Đại học Duy Tân. Tool hoạt động 24/7, tự động kiểm tra trạng thái lớp học và gửi email thông báo ngay khi có chỗ trống.
-🚀 Tính năng nổi bật
-Giám sát 24/7: Sử dụng "Bầy ong thợ" (Worker Swarm) trên GitHub Actions, kiểm tra định kỳ mỗi 5 phút.
-Tốc độ cao: Phân tải request giúp kiểm tra hàng trăm lớp học chỉ trong vài giây.
-Thông báo tức thì: Gửi Email ngay khi phát hiện slot trống.
-Giao diện SaaS: Quản lý người dùng, phân quyền Admin/Khách hàng, hệ thống thông báo Popup.
-Chi phí 0đ: Vận hành hoàn toàn miễn phí trên hạ tầng GitHub & Firebase.
-⚠️ Lưu ý quan trọng
-Tool chỉ BÁO SLOT, KHÔNG ĐĂNG KÝ HỘ: Bạn phải tự đăng nhập vào trang MyDTU để đăng ký.
-Miễn trừ trách nhiệm: Chúng tôi không chịu trách nhiệm nếu server trường bị lỗi hoặc bạn không đăng ký kịp.
+<div align="center">
+
+🎯 DTU Course Sniper Pro
+
+Hệ Thống Săn Slot Tín Chỉ Đa Luồng (SaaS Platform)
+
+Tự động giám sát • Báo cáo tức thì • Hoạt động 24/7 • Đa người dùng
+
+</div>
+
+📖 Giới Thiệu
+
+DTU Course Sniper Pro là giải pháp công nghệ giúp sinh viên Đại học Duy Tân giải quyết nỗi lo "hết slot". Hệ thống vận hành như một "bầy ong thợ" trên nền tảng Cloud, liên tục kiểm tra trạng thái lớp học và gửi cảnh báo ngay lập tức khi phát hiện có người hủy lớp.
+
+Sứ mệnh: Giúp sinh viên không còn phải thức đêm canh web trường thủ công.
+
+✨ Tính Năng Nổi Bật
+
+🤖 Worker Swarm: Sử dụng chiến thuật ma trận (Matrix Strategy) để kích hoạt hàng loạt Worker chạy song song, quét hàng trăm lớp chỉ trong vài giây.
+
+⚡ Real-time Alert: Gửi Email cảnh báo ngay lập tức tới hòm thư của bạn khi phát hiện "Slot trống".
+
+🛡️ SaaS Architecture: Hệ thống quản lý chuyên nghiệp với phân quyền Admin/User chặt chẽ và bảo mật dữ liệu riêng biệt.
+
+📢 Global Notify: Hệ thống thông báo thời gian thực từ Admin tới toàn bộ khách hàng đang online.
+
+🛠 Công Nghệ
+
+🚀 Nguyên Lý Hoạt Động
+
+Lên lịch: GitHub Actions kích hoạt "Bầy ong thợ" định kỳ (Cronjob).
+
+Phân tán: Hệ thống chia nhỏ danh sách lớp học cho nhiều Worker xử lý song song.
+
+Xử lý: Worker kiểm tra trạng thái lớp học trên website trường.
+
+Báo cáo: Nếu có slot trống ➔ Gửi Email cho khách ➔ Cập nhật Database.
+
+⚠️ Lưu Ý Quan Trọng
+
+🔴 TOOL CHỈ BÁO SLOT, KHÔNG ĐĂNG KÝ HỘ. Bạn cần tự đăng nhập vào trang MyDTU để thực hiện đăng ký tín chỉ.
+
+🟠 MIỄN TRỪ TRÁCH NHIỆM. Chúng tôi cam kết hệ thống hoạt động ổn định nhất có thể. Tuy nhiên, nếu website nhà trường bảo trì hoặc sập, tool sẽ tạm dừng hoạt động.
+
+🟢 CẠNH TRANH CÔNG BẰNG. Việc nhận được thông báo không đảm bảo 100% bạn sẽ đăng ký được nếu có sinh viên khác nhanh tay hơn.
+
 ⚖️ License & Copyright
+
 © 2025 DTU Sniper Pro. All Rights Reserved.
-Dự án này được phát hành dưới giấy phép GNU AGPLv3.
-Điều này có nghĩa là:
-Bạn được phép xem mã nguồn để học tập.
-Nếu bạn sao chép, sửa đổi hoặc sử dụng mã nguồn này để chạy một dịch vụ (kể cả qua mạng/web service), bạn BẮT BUỘC phải công khai mã nguồn dự án của bạn dưới cùng giấy phép AGPLv3.
-Nghiêm cấm sử dụng mã nguồn này cho mục đích thương mại đóng (Closed Source Commercial) mà không có sự đồng ý của tác giả.
-Author: Nguyễn Phát Đại
-Contact:
-Zalo: 039632089
-Facebook: Nguyễn Phát Đại
-Telegram: @Daidzvc
+
+Dự án này được phát hành dưới giấy phép mạnh GNU AGPLv3.
+
+✅ Được phép: Xem mã nguồn, học tập, chạy thử nghiệm cá nhân.
+
+🚫 Cấm: Sao chép, sửa đổi, thương mại hóa (Closed Source) mà không công khai mã nguồn của bạn.
+
+📞 Liên Hệ Admin
+
+Mọi vấn đề về kích hoạt tài khoản, gia hạn, hoặc báo lỗi, vui lòng liên hệ Nguyễn Phát Đại:
+
+<div align="center">
+
+
+
+
+
+<i>Made with ❤️ by DaiDzzz</i>
+</div>
