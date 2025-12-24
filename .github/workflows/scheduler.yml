@@ -1,18 +1,19 @@
-name: DTU Sniper Matrix Swarm
+name: DTU Sniper 24/7 Swarm
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # Chạy mỗi 5 phút
-  workflow_dispatch:
+    # Chạy mỗi 6 tiếng (0h, 6h, 12h, 18h)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Nút chạy thủ công
 
 jobs:
-  check_slots_swarm:
+  long_running_swarm:
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false # Nếu 1 worker lỗi, các worker khác vẫn chạy tiếp
+      fail-fast: false
       matrix:
-        # Định nghĩa 5 worker (ID từ 0 đến 4)
-        worker_id: [0, 1, 2, 3, 4]
+        # Số lượng Worker (Ví dụ 3 con chạy song song)
+        worker_id: [0, 1, 2]
 
     steps:
     - name: Checkout code
@@ -28,12 +29,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4 pytz
 
-    - name: Run Distributed Worker
+    - name: Run Infinite Loop Worker
       env:
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         FIREBASE_SECRET: ${{ secrets.FIREBASE_SECRET }}
-        # Truyền tham số Matrix vào Script
         WORKER_ID: ${{ matrix.worker_id }}
-        TOTAL_WORKERS: 5 
+        TOTAL_WORKERS: 3
       run: python checker.py

@@ -12,6 +12,8 @@ import sys
 
 # --- CONFIG ---
 FIREBASE_BASE_URL = "https://tool-theo-doi-slot-default-rtdb.asia-southeast1.firebasedatabase.app"
+SLEEP_INTERVAL = 300  # Thời gian nghỉ giữa các lần quét (300s = 5 phút)
+MAX_RUNTIME = 5 * 60 * 60 + 50 * 60  # 5 giờ 50 phút (Gần giới hạn 6h của GitHub)
 
 # Lấy bí mật từ Environment
 EMAIL_USER = os.environ.get('EMAIL_USER') 
@@ -62,7 +64,6 @@ def send_email(to_email, class_name, slots, url, reg_code):
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
             server.login(EMAIL_USER, EMAIL_PASSWORD)
             server.sendmail(EMAIL_USER, to_email, msg.as_string())
-        # print(f"      📧 Mail sent to {to_email}")
         return True
     except Exception as e:
         print(f"      ❌ Mail error: {e}")
@@ -98,15 +99,13 @@ def check_one_class(url):
         return name, code, reg_code, slots
     except: return None, None, None, None
 
-def run_worker():
-    print(f"\n[{get_current_time()}] --- WORKER {WORKER_ID}/{TOTAL_WORKERS} STARTED ---")
+def run_batch():
+    """Hàm chạy 1 lượt quét"""
+    print(f"\n[{get_current_time()}] --- BATCH STARTED (Worker {WORKER_ID}) ---")
     
     auth_suffix = get_auth_param()
     
-    # Random sleep nhẹ để tránh tất cả worker hit server cùng 1 millisecond
-    time.sleep(random.uniform(0.5, 3.0))
-
-    # 1. Tải TOÀN BỘ dữ liệu (Users & Requests)
+    # 1. Tải TOÀN BỘ dữ liệu
     try:
         users_resp = requests.get(f"{FIREBASE_BASE_URL}/users.json{auth_suffix}")
         all_requests_resp = requests.get(f"{FIREBASE_BASE_URL}/requests.json{auth_suffix}")
@@ -118,11 +117,9 @@ def run_worker():
         return
 
     # 2. Gom nhóm Request (De-duplication)
-    # Map: URL -> [List of {uid, req_id, user_email, ...}]
     unique_tasks_map = {}
 
     for uid, user_reqs in requests_data.items():
-        # Check User hợp lệ
         user_info = users_data.get(uid)
         if not user_info: continue
         expired_at = user_info.get('expired_at', 0)
@@ -138,7 +135,6 @@ def run_worker():
             if url not in unique_tasks_map:
                 unique_tasks_map[url] = []
             
-            # Thêm người đăng ký vào nhóm URL này
             unique_tasks_map[url].append({
                 'uid': uid,
                 'email': user_info.get('email'),
@@ -147,33 +143,25 @@ def run_worker():
             })
 
     unique_urls = list(unique_tasks_map.keys())
-    total_links = len(unique_urls)
     
-    print(f"📊 Stats: {len(users_data)} Users | {total_links} Unique URLs")
-
     # 3. Phân chia công việc (Sharding Logic)
     my_tasks = []
     for i, url in enumerate(unique_urls):
-        # Nếu số thứ tự chia lấy dư cho tổng worker == ID của worker này
         if i % TOTAL_WORKERS == WORKER_ID:
             my_tasks.append(url)
 
-    print(f"🐜 Worker {WORKER_ID} đảm nhận: {len(my_tasks)} links.")
+    print(f"🐜 Nhiệm vụ: {len(my_tasks)} links.")
 
     # 4. Thực thi
     for i, url in enumerate(my_tasks):
         subscribers = unique_tasks_map[url]
-        print(f"\n[{i+1}/{len(my_tasks)}] Checking Link: ...{url[-20:]}")
+        # print(f"Checking Link: ...{url[-20:]}")
         
-        # CHỈ CHECK 1 LẦN DUY NHẤT
         name, code, reg_code, slots = check_one_class(url)
         
         if not name:
-            print("   ⚠️ Failed to fetch.")
             continue
             
-        print(f"   ✅ Result: {code} | Slots: {slots} | Subs: {len(subscribers)}")
-
         curr_slots = int(slots) if slots.isdigit() else 0
 
         # CẬP NHẬT CHO TẤT CẢ USER ĐĂNG KÝ LINK NÀY
@@ -185,16 +173,14 @@ def run_worker():
             
             new_notified = old_notified
 
-            # Logic Mail
             if curr_slots > 0:
                 if not old_notified:
-                    print(f"      Title: Alerting {email}...")
+                    print(f"      🔥 Alerting {email}...")
                     if send_email(email, name, slots, url, reg_code):
                         new_notified = True
             else:
-                if old_notified: new_notified = False # Reset
+                if old_notified: new_notified = False
 
-            # Patch DB
             patch_data = {
                 "last_check": get_current_time(),
                 "name": name, "code": code, "registration_code": reg_code, "slots": slots,
@@ -202,12 +188,27 @@ def run_worker():
             }
             try:
                 requests.patch(f"{FIREBASE_BASE_URL}/requests/{uid}/{req_id}.json{auth_suffix}", json=patch_data, timeout=5)
-            except:
-                pass # Bỏ qua lỗi nhỏ để chạy tiếp
+            except: pass
         
         time.sleep(1) # Nghỉ nhẹ giữa các link
 
-    print(f"\n--- WORKER {WORKER_ID} FINISHED ---")
+def main_loop():
+    print(f"🚀 WORKER {WORKER_ID}/{TOTAL_WORKERS} STARTING INFINITE LOOP...")
+    start_time = time.time()
+    
+    while True:
+        # Kiểm tra thời gian chạy
+        elapsed = time.time() - start_time
+        if elapsed > MAX_RUNTIME:
+            print(f"🛑 Đã chạy đủ {elapsed/3600:.2f} giờ. Tự thoát để nhường slot mới.")
+            break
+            
+        # Chạy 1 lượt quét
+        run_batch()
+        
+        # Ngủ nghỉ
+        print(f"💤 Sleeping {SLEEP_INTERVAL}s...")
+        time.sleep(SLEEP_INTERVAL)
 
 if __name__ == "__main__":
-    run_worker()
+    main_loop()
