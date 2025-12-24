@@ -60,6 +60,10 @@ export function renderAdminPanel() {
         }
         
         const userArray = Object.keys(users).map(key => ({ uid: key, ...users[key] }));
+<<<<<<< HEAD
+=======
+        // Sắp xếp: Admin lên đầu -> Mới nhất -> Cũ nhất
+>>>>>>> 8f3ea025e65b588facdae784801f6d82409cceb7
         userArray.sort((a, b) => {
             if (a.role === 'admin') return -1;
             if (b.role === 'admin') return 1;
@@ -69,6 +73,7 @@ export function renderAdminPanel() {
         userArray.forEach(u => {
             const now = Date.now();
             const isUserExpired = u.expired_at < now;
+<<<<<<< HEAD
             const daysLeft = Math.ceil((u.expired_at - now) / (1000 * 60 * 60 * 24));
             
             let statusHtml = '';
@@ -88,6 +93,29 @@ export function renderAdminPanel() {
                 <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+30D</button>
                 <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border hover:bg-red-50 text-red-500 px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-lock"></i></button>
             ` : '<span class="text-xs text-gray-300">Super Admin</span>';
+=======
+            
+            // --- TÍNH TOÁN SỐ NGÀY CÒN LẠI ---
+            const daysLeft = Math.ceil((u.expired_at - now) / (1000 * 60 * 60 * 24));
+            
+            let statusHtml = '';
+            if (u.role === 'admin') {
+                statusHtml = '<span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded">ADMIN</span>';
+            } else if (isUserExpired) {
+                statusHtml = '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">HẾT HẠN</span>';
+            } else {
+                // Hiển thị số ngày cụ thể
+                statusHtml = `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded">CÒN ${daysLeft} NGÀY</span>`;
+            }
+
+            let actionHtml = u.role === 'admin' ? '' : `
+                <div class="flex gap-1 justify-end">
+                    <button onclick="window.extendUser('${u.uid}', 1)" class="bg-white border hover:bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 1 ngày">+1D</button>
+                    <button onclick="window.extendUser('${u.uid}', 7)" class="bg-white border hover:bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 7 ngày">+7D</button>
+                    <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 30 ngày">+30D</button>
+                    <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border hover:bg-red-50 text-red-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Khóa user"><i class="fa-solid fa-lock"></i></button>
+                </div>`;
+>>>>>>> 8f3ea025e65b588facdae784801f6d82409cceb7
 
             const row = document.createElement('tr');
             row.className = "border-b border-slate-50 hover:bg-slate-50/50";
@@ -111,12 +139,22 @@ export function extendUser(uid, days) {
         if (snapshot.exists()) {
             const currentExpiry = snapshot.val().expired_at || Date.now();
             const now = Date.now();
+            
+            // Logic cộng dồn: Nếu còn hạn thì cộng tiếp vào ngày hết hạn cũ. Nếu hết hạn thì tính từ bây giờ.
             const baseTime = currentExpiry < now ? now : currentExpiry;
-            let newExpiry = days === -1 ? now - 1000 : baseTime + (days * 24 * 60 * 60 * 1000);
+            
+            let newExpiry;
+            if (days === -1) {
+                newExpiry = now - 1000; // Khóa ngay (set về quá khứ)
+            } else {
+                newExpiry = baseTime + (days * 24 * 60 * 60 * 1000);
+            }
+            
             update(userRef, { expired_at: newExpiry });
         }
     });
 }
+<<<<<<< HEAD
 
 // --- VIP MODAL LOGIC ---
 export function openVipModal(uid) {
@@ -168,3 +206,5 @@ export function saveVipConfig() {
         })
         .catch(err => alert("❌ Lỗi: " + err.message));
 }
+=======
+>>>>>>> 8f3ea025e65b588facdae784801f6d82409cceb7
