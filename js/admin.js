@@ -60,22 +60,36 @@ export function renderAdminPanel() {
         }
         
         const userArray = Object.keys(users).map(key => ({ uid: key, ...users[key] }));
-        userArray.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+        // Sắp xếp: Admin lên đầu -> Mới nhất -> Cũ nhất
+        userArray.sort((a, b) => {
+            if (a.role === 'admin') return -1;
+            if (b.role === 'admin') return 1;
+            return (b.created_at || 0) - (a.created_at || 0);
+        });
 
         userArray.forEach(u => {
             const now = Date.now();
             const isUserExpired = u.expired_at < now;
-            let statusHtml = u.role === 'admin' 
-                ? '<span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded">ADMIN</span>'
-                : (isUserExpired ? '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">HẾT HẠN</span>' 
-                : `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded">CÒN HẠN</span>`);
+            
+            // --- TÍNH TOÁN SỐ NGÀY CÒN LẠI ---
+            const daysLeft = Math.ceil((u.expired_at - now) / (1000 * 60 * 60 * 24));
+            
+            let statusHtml = '';
+            if (u.role === 'admin') {
+                statusHtml = '<span class="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded">ADMIN</span>';
+            } else if (isUserExpired) {
+                statusHtml = '<span class="bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded">HẾT HẠN</span>';
+            } else {
+                // Hiển thị số ngày cụ thể
+                statusHtml = `<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded">CÒN ${daysLeft} NGÀY</span>`;
+            }
 
             let actionHtml = u.role === 'admin' ? '' : `
                 <div class="flex gap-1 justify-end">
-                    <button onclick="window.extendUser('${u.uid}', 1)" class="bg-white border hover:bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+1D</button>
-                    <button onclick="window.extendUser('${u.uid}', 7)" class="bg-white border hover:bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+7D</button>
-                    <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm">+30D</button>
-                    <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border hover:bg-red-50 text-red-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm"><i class="fa-solid fa-lock"></i></button>
+                    <button onclick="window.extendUser('${u.uid}', 1)" class="bg-white border hover:bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 1 ngày">+1D</button>
+                    <button onclick="window.extendUser('${u.uid}', 7)" class="bg-white border hover:bg-blue-50 text-blue-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 7 ngày">+7D</button>
+                    <button onclick="window.extendUser('${u.uid}', 30)" class="bg-white border hover:bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Cộng 30 ngày">+30D</button>
+                    <button onclick="window.extendUser('${u.uid}', -1)" class="bg-white border hover:bg-red-50 text-red-500 text-[10px] font-bold px-2 py-1 rounded shadow-sm" title="Khóa user"><i class="fa-solid fa-lock"></i></button>
                 </div>`;
 
             const row = document.createElement('tr');
@@ -98,8 +112,17 @@ export function extendUser(uid, days) {
         if (snapshot.exists()) {
             const currentExpiry = snapshot.val().expired_at || Date.now();
             const now = Date.now();
+            
+            // Logic cộng dồn: Nếu còn hạn thì cộng tiếp vào ngày hết hạn cũ. Nếu hết hạn thì tính từ bây giờ.
             const baseTime = currentExpiry < now ? now : currentExpiry;
-            let newExpiry = days === -1 ? now - 1000 : baseTime + (days * 24 * 60 * 60 * 1000);
+            
+            let newExpiry;
+            if (days === -1) {
+                newExpiry = now - 1000; // Khóa ngay (set về quá khứ)
+            } else {
+                newExpiry = baseTime + (days * 24 * 60 * 60 * 1000);
+            }
+            
             update(userRef, { expired_at: newExpiry });
         }
     });
