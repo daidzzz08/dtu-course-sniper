@@ -2,7 +2,7 @@ name: DTU Sniper 24/7 Swarm
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+##### BỎ DẤU # ĐỂ CHẠY LẠI    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
